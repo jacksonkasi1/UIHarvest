@@ -18,9 +18,10 @@ UI Harvest is a powerful CLI tool powered by Playwright that automatically extra
 This project uses [Bun](https://bun.sh/).
 
 ```bash
-git clone https://github.com/yourusername/UIHarvest.git
+git clone https://github.com/jacksonkasi1/UIHarvest.git
 cd UIHarvest
 bun install
+bunx playwright install chromium
 ```
 
 ## 🛠️ Usage
