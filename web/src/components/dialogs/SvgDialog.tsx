@@ -27,6 +27,9 @@ export function SvgDialog({ selectedSvg, setSelectedSvg }: SvgDialogProps) {
               <MetricBox label="Width" value={`${Math.round(selectedSvg.width)}px`} />
               <MetricBox label="Height" value={`${Math.round(selectedSvg.height)}px`} />
               <MetricBox label="ViewBox" value={selectedSvg.viewBox || "—"} />
+              {selectedSvg.reuseCount > 1 && (
+                <MetricBox label="Reused" value={`${selectedSvg.reuseCount} times`} />
+              )}
             </div>
 
             <div>

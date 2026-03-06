@@ -15,6 +15,7 @@ export function SvgsView({ data, setSelectedSvg }: { data: DesignSystemData, set
             <div className="p-3 font-mono text-[10px] text-muted-foreground flex flex-col gap-1 text-center">
               <span className="truncate text-foreground" title={svg.title}>{svg.title || "—"}</span>
               <span>{Math.round(svg.width)}×{Math.round(svg.height)}px</span>
+              {svg.reuseCount > 1 && <span className="text-orange-400">reused ×{svg.reuseCount}</span>}
             </div>
           </Card>
         ))}

@@ -19,7 +19,16 @@ import {
   ComponentsView,
   SectionsView,
   ImagesView,
-  SvgsView
+  SvgsView,
+  GradientsView,
+  BordersView,
+  TransitionsView,
+  CssVarsView,
+  FontFilesView,
+  HoversView,
+  LayoutSystemView,
+  PseudoElementsView,
+  VideosView
 } from "./views"
 
 // -- APP --
@@ -107,10 +116,18 @@ export default function App() {
           {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
           {activeTab === "tree" && <TreeView data={data} setSelectedComp={setSelectedComp} />}
           {activeTab === "colors" && <ColorsView data={data} />}
+          {activeTab === "gradients" && <GradientsView data={data} />}
           {activeTab === "typography" && <TypographyView data={data} />}
           {activeTab === "spacing" && <SpacingView data={data} />}
           {activeTab === "radii" && <RadiiView data={data} />}
           {activeTab === "shadows" && <ShadowsView data={data} />}
+          {activeTab === "borders" && <BordersView data={data} />}
+          {activeTab === "transitions" && <TransitionsView data={data} />}
+          {activeTab === "css-vars" && <CssVarsView data={data} />}
+          {activeTab === "fonts" && <FontFilesView data={data} />}
+          
+          {activeTab === "hovers" && <HoversView data={data} setSelectedComp={setSelectedComp} />}
+          
           {activeTab === "patterns" && <PatternsView data={data} setSelectedComp={setSelectedComp} />}
           {activeTab.startsWith("comp-") && (
             <ComponentsView 
@@ -122,8 +139,12 @@ export default function App() {
             />
           )}
           {activeTab === "sections" && <SectionsView data={data} setSelectedSection={setSelectedSection} />}
+          {activeTab === "layout-system" && <LayoutSystemView data={data} />}
+          
           {activeTab === "images" && <ImagesView data={data} />}
           {activeTab === "svgs" && <SvgsView data={data} setSelectedSvg={setSelectedSvg} />}
+          {activeTab === "pseudos" && <PseudoElementsView data={data} />}
+          {activeTab === "videos" && <VideosView data={data} />}
 
         </div>
       </main>

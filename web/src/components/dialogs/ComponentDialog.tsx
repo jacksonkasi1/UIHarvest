@@ -19,6 +19,7 @@ export function ComponentDialog({ selectedComp, setSelectedComp, data }: Compone
   const parent = selectedComp.parentId ? data.components.find((c: any) => c.id === selectedComp.parentId) : null
   const pattern = selectedComp.patternId ? (data.patterns || []).find((p: any) => p.id === selectedComp.patternId) : null
   const styleEntries = Object.entries(selectedComp.styles || {}).filter(([_,v]) => v && v !== 'none' && v !== 'normal' && v !== '0px' && v !== '')
+  const hoverState = data.interactions?.hoverStates?.find((h: any) => h.componentId === selectedComp.id)
 
   return (
     <Dialog open={!!selectedComp} onOpenChange={(o) => !o && setSelectedComp(null)}>
@@ -41,6 +42,34 @@ export function ComponentDialog({ selectedComp, setSelectedComp, data }: Compone
                       <div className="bg-card rounded-xl p-8 border border-border flex items-center justify-center relative overflow-hidden ring-1 ring-inset ring-foreground/5 shadow-inner">
                         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjMWExYTFhIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wIDBMOCA4Wk04IDBMMCA4WiIgc3Ryb2tlPSIjMjI0IiBzdHJva2Utd2lkdGg9IjEiPjwvcGF0aD4KPC9zdmc+')] opacity-20 mix-blend-overlay"></div>
                         <img src={`/output/${selectedComp.screenshot}`} alt={selectedComp.name} className="max-w-full max-h-[300px] object-contain relative z-10 drop-shadow-lg" />
+                      </div>
+                    )}
+
+                    {hoverState && (
+                      <div>
+                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2"><Palette className="w-3.5 h-3.5" /> Hover State</h3>
+                        <div className="bg-card border border-border rounded-md p-4">
+                          <div className="flex flex-col sm:flex-row gap-4 border-b border-border pb-4 mb-4">
+                            <div className="flex-1 text-center bg-muted/30 p-4 rounded-md">
+                              <div className="text-[10px] text-muted-foreground font-semibold tracking-wider mb-2">DEFAULT</div>
+                              {selectedComp.screenshot && <img src={`/output/${selectedComp.screenshot}`} className="max-h-[100px] object-contain mx-auto" />}
+                            </div>
+                            <div className="flex-1 text-center bg-muted/30 p-4 rounded-md">
+                              <div className="text-[10px] text-muted-foreground font-semibold tracking-wider mb-2">HOVER</div>
+                              {hoverState.screenshotHover && <img src={`/output/${hoverState.screenshotHover}`} className="max-h-[100px] object-contain mx-auto" />}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                            {Object.entries(hoverState.changes).map(([k, v]: [string, any]) => (
+                              <div key={k} className="flex gap-2 text-xs font-mono">
+                                <span className="text-muted-foreground min-w-[120px]">{k}</span>
+                                <span className="text-red-400 truncate flex-1" title={v.from}>{v.from}</span>
+                                <span className="text-muted-foreground">→</span>
+                                <span className="text-green-500 truncate flex-1" title={v.to}>{v.to}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
 

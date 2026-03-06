@@ -1,7 +1,8 @@
 import {
   Palette, Type, Ruler, Square, MoonStar, Image as ImageIcon,
   PenTool, Boxes, Activity, Box, LayoutTemplate,
-  Sun, Moon, FolderTree, Repeat
+  Sun, Moon, FolderTree, Repeat, Wrench, FileType, 
+  MousePointerClick, Spline, Frame, SquareDashedBottom, Focus, MonitorPlay, Ghost
 } from "lucide-react"
 
 import type { DesignSystemData } from "@/types/design-system"
@@ -57,10 +58,15 @@ export function Sidebar({
 
         <NavGroup title="Design Tokens">
           <NavItem id="colors" icon={<Palette />} label="Colors" count={data.tokens.colors.length} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="gradients" icon={<Spline />} label="Gradients" count={data.tokens.gradients?.length || 0} active={activeTab} onClick={setActiveTab} />
           <NavItem id="typography" icon={<Type />} label="Typography" count={data.tokens.typography.length} active={activeTab} onClick={setActiveTab} />
           <NavItem id="spacing" icon={<Ruler />} label="Spacing" count={data.tokens.spacing.length} active={activeTab} onClick={setActiveTab} />
           <NavItem id="radii" icon={<Square />} label="Radii" count={data.tokens.radii.length} active={activeTab} onClick={setActiveTab} />
           <NavItem id="shadows" icon={<MoonStar />} label="Shadows" count={data.tokens.shadows.length} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="borders" icon={<SquareDashedBottom />} label="Borders" count={data.tokens.borders?.length || 0} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="transitions" icon={<Focus />} label="Transitions" count={data.tokens.transitions?.length || 0} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="css-vars" icon={<Wrench />} label="CSS Variables" count={data.cssVariables?.length || 0} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="fonts" icon={<FileType />} label="Font Files" count={data.fontFaces?.length || 0} active={activeTab} onClick={setActiveTab} />
         </NavGroup>
 
         <NavGroup title="Components">
@@ -76,6 +82,10 @@ export function Sidebar({
             />
           ))}
         </NavGroup>
+        
+        <NavGroup title="Interactions">
+          <NavItem id="hovers" icon={<MousePointerClick />} label="Hover States" count={data.interactions?.hoverStates?.length || 0} active={activeTab} onClick={setActiveTab} />
+        </NavGroup>
 
         <NavGroup title="Patterns">
           <NavItem id="patterns" icon={<Repeat />} label="Repeated Patterns" count={data.patterns?.length || 0} active={activeTab} onClick={setActiveTab} />
@@ -83,11 +93,16 @@ export function Sidebar({
 
         <NavGroup title="Layout">
           <NavItem id="sections" icon={<LayoutTemplate />} label="Sections" count={data.sections.length} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="layout-system" icon={<Frame />} label="Layout System" active={activeTab} onClick={setActiveTab} />
         </NavGroup>
 
         <NavGroup title="Assets">
           <NavItem id="images" icon={<ImageIcon />} label="Images" count={data.assets.images.length} active={activeTab} onClick={setActiveTab} />
           <NavItem id="svgs" icon={<Boxes />} label="SVGs / Icons" count={data.assets.svgs.length} active={activeTab} onClick={setActiveTab} />
+          <NavItem id="pseudos" icon={<Ghost />} label="Pseudo Elements" count={data.assets.pseudoElements?.length || 0} active={activeTab} onClick={setActiveTab} />
+          {(data.assets.videos?.length || 0) > 0 && (
+            <NavItem id="videos" icon={<MonitorPlay />} label="Videos" count={data.assets.videos.length} active={activeTab} onClick={setActiveTab} />
+          )}
         </NavGroup>
       </div>
     </aside>

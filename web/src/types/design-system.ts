@@ -4,13 +4,29 @@ export interface DesignSystemData {
     url: string;
     viewport: { width: number; height: number };
     fullHeight: number;
+    favicon?: string;
+    ogImage?: string;
+    description?: string;
   };
   tokens: {
     colors: { hex: string; count: number; usages: string[] }[];
-    typography: { fontSize: string; fontWeight: string; fontFamily: string; lineHeight: string; color: string; sample: string; count: number; letterSpacing: string; }[];
+    gradients: { value: string; element: string }[];
+    typography: {
+      fontSize: string;
+      fontWeight: string;
+      fontFamily: string;
+      lineHeight: string;
+      color: string;
+      sample: string;
+      count: number;
+      letterSpacing: string;
+      textTransform?: string;
+    }[];
     spacing: number[];
     radii: { value: string; count: number }[];
     shadows: { value: string; count: number }[];
+    borders: { value: string; count: number }[];
+    transitions: { value: string; count: number }[];
   };
   components: {
     id: string;
@@ -18,7 +34,6 @@ export interface DesignSystemData {
     subType: string;
     name: string;
     html: string;
-    cleanHtml: string;
     rect: { width: number; height: number; x: number; y: number };
     styles: { [key: string]: string };
     dataAttributes: { [key: string]: string };
@@ -52,7 +67,17 @@ export interface DesignSystemData {
   }[];
   assets: {
     images: { src: string; alt: string; width: number; height: number; localPath?: string }[];
-    svgs: { html: string; viewBox: string; width: number; height: number; title: string; localPath?: string }[];
+    svgs: { html: string; viewBox: string; width: number; height: number; title: string; localPath?: string; reuseCount: number }[];
+    videos: { tag: string; src: string; width: number; height: number; poster: string }[];
+    pseudoElements: { selector: string; parentTag: string; content: string; styles: any }[];
+  };
+  interactions: {
+    hoverStates: { componentId: string; componentType: string; componentName: string; changes: { [key: string]: { from: string; to: string } }; screenshotHover?: string }[];
+  };
+  cssVariables: { name: string; value: string; selector: string }[];
+  fontFaces: { family: string; weight: string; style: string; format?: string; urls?: string[]; localPath?: string; status?: string }[];
+  layoutSystem: {
+    containerWidths: number[];
   };
   fullPageScreenshot?: string;
 }

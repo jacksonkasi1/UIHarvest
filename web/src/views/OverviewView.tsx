@@ -15,15 +15,21 @@ export function OverviewView({ data, uniqueVariants }: { data: DesignSystemData,
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard label="Colors" value={data.tokens.colors.length} />
+        <StatCard label="Gradients" value={data.tokens.gradients?.length || 0} />
         <StatCard label="Typography" value={data.tokens.typography.length} />
         <StatCard label="Spacing" value={data.tokens.spacing.length} />
         <StatCard label="Radii" value={data.tokens.radii.length} />
         <StatCard label="Shadows" value={data.tokens.shadows.length} />
+        <StatCard label="Borders" value={data.tokens.borders?.length || 0} />
+        <StatCard label="Transitions" value={data.tokens.transitions?.length || 0} />
         <StatCard label="Components" value={data.components.length} />
         <StatCard label="Variants" value={uniqueVariants} />
         <StatCard label="Patterns" value={data.patterns?.length || 0} />
+        <StatCard label="Hover States" value={data.interactions?.hoverStates?.length || 0} />
         <StatCard label="Sections" value={data.sections.length} />
         <StatCard label="Assets" value={data.assets.images.length + data.assets.svgs.length} />
+        <StatCard label="CSS Vars" value={data.cssVariables?.length || 0} />
+        <StatCard label="Font Faces" value={data.fontFaces?.length || 0} />
       </div>
 
       {data.fullPageScreenshot && (
