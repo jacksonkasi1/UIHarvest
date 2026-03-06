@@ -1,8 +1,9 @@
-import { chromium } from "playwright";
+import { chromium, Page, BrowserContext } from "playwright";
 import express from "express";
 import path from "path";
 import fs from "fs";
 import { exec } from "child_process";
+import os from "os";
 import { extractDesignSystem } from "./extractor.js";
 
 const ROOT = process.cwd();
@@ -20,6 +21,17 @@ function openBrowser(url: string) {
   exec(`${cmd} ${url}`);
 }
 
+async function runInParallel<T>(items: T[], concurrency: number, fn: (item: T, workerId: number) => Promise<void>) {
+  let index = 0;
+  const workers = new Array(concurrency).fill(0).map(async (_, workerId) => {
+    while (index < items.length) {
+      const item = items[index++];
+      if (item) await fn(item, workerId);
+    }
+  });
+  await Promise.all(workers);
+}
+
 async function main() {
   const url = process.argv[2];
   if (!url) {
@@ -31,11 +43,32 @@ async function main() {
   ensureDirs();
   console.log(`\n🔍  Target: ${url}\n`);
 
+  // Detect System Specs for Parallelism
+  const cpuCount = os.cpus().length;
+  const memGb = os.totalmem() / (1024 ** 3);
+  let concurrency = Math.max(1, Math.min(cpuCount, Math.floor(memGb / 2)));
+  if (process.env.MAX_CONCURRENCY) concurrency = parseInt(process.env.MAX_CONCURRENCY, 10);
+  console.log(`⚡  System spec: ${cpuCount} Cores, ${memGb.toFixed(1)}GB RAM`);
+  console.log(`⚡  Auto-configured concurrency level: ${concurrency} (Override with MAX_CONCURRENCY env var)`);
+
   const browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,
     ignoreHTTPSErrors: true,
+  });
+
+  // Aggressive Network Blocking
+  await ctx.route("**/*", (route) => {
+    const rType = route.request().resourceType();
+    const rUrl = route.request().url().toLowerCase();
+    
+    // Block unnecessary trackers, ads, and heavy media
+    const isTracker = ["google-analytics", "analytics", "tracker", "doubleclick", "facebook", "mixpanel", "segment"].some(t => rUrl.includes(t));
+    if (isTracker || ["media", "websocket", "manifest", "other"].includes(rType)) {
+      return route.abort();
+    }
+    return route.continue();
   });
 
   // Intercept font files
@@ -54,17 +87,31 @@ async function main() {
 
   console.log("📄  Loading page…");
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
   } catch {
-    console.log("⚠️   networkidle timeout, continuing…");
+    console.log("⚠️   navigation timeout, continuing…");
   }
 
-  // Scroll to trigger lazy load and animations
-  console.log("📜  Scrolling page to trigger lazy loading…");
+  // Spoof IntersectionObserver and scroll fast to trigger lazy load instantly
+  console.log("📜  Triggering aggressive lazy loading & spoofing intersection…");
   await page.evaluate(async () => {
+    // Override IntersectionObserver to fire immediately
+    const OriginalObserver = window.IntersectionObserver;
+    window.IntersectionObserver = function (callback, options) {
+      const observer = new OriginalObserver(callback, options);
+      const originalObserve = observer.observe.bind(observer);
+      observer.observe = (element) => {
+        originalObserve(element);
+        // Force callback trigger for this element
+        callback([{ isIntersecting: true, target: element, intersectionRatio: 1, boundingClientRect: element.getBoundingClientRect(), intersectionRect: element.getBoundingClientRect(), rootBounds: null, time: Date.now() }] as IntersectionObserverEntry[], observer);
+      };
+      return observer;
+    } as any;
+    
+    // Fast scroll to bottom
     await new Promise<void>((resolve) => {
       let totalHeight = 0;
-      const distance = 400;
+      const distance = 800;
       const timer = setInterval(() => {
         const scrollHeight = document.body.scrollHeight;
         window.scrollBy(0, distance);
@@ -74,13 +121,13 @@ async function main() {
           window.scrollTo(0, 0);
           resolve();
         }
-      }, 150); // Slower scroll to allow fetching
+      }, 50); // Very fast scroll
     });
   });
 
   // Wait for any newly triggered requests to finish
   try {
-    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await page.waitForLoadState("networkidle", { timeout: 10000 });
   } catch {}
 
   console.log("⏳  Waiting for fonts and images to complete…");
@@ -91,14 +138,14 @@ async function main() {
         if (img.complete) return Promise.resolve();
         return new Promise((resolve) => {
           img.onload = img.onerror = resolve;
-          setTimeout(resolve, 10000); // 10s Timeout for very slow images
+          setTimeout(resolve, 5000); // 5s Timeout for very slow images
         });
       })
     );
   });
 
   // Final pause for hydration and layout shifts
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(1000);
 
   // Fix sticky/fixed elements before screenshots
   console.log("🛠️   Adjusting fixed elements for full-page screenshot…");
@@ -188,21 +235,53 @@ async function main() {
   console.log(""); // Newline after progress
 
   console.log(`📸  Component screenshots (up to 200)…`);
+  
+  // Create parallel pages if concurrency > 1
+  const pages: Page[] = [page];
+  if (concurrency > 1) {
+    console.log(`⚡  Spawning ${concurrency - 1} extra workers for parallel screenshots…`);
+    for (let i = 1; i < concurrency; i++) {
+      const p = await ctx.newPage();
+      try {
+        await p.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await p.evaluate(() => {
+          const elements = document.querySelectorAll("*");
+          for (let j = 0; j < elements.length; j++) {
+            const el = elements[j] as HTMLElement;
+            const style = window.getComputedStyle(el);
+            if (style.position === "fixed" || style.position === "sticky") {
+              el.style.setProperty("position", "absolute", "important");
+            }
+          }
+        });
+        pages.push(p);
+      } catch {
+        // Fallback if worker fails to load
+        pages.push(page); 
+      }
+    }
+  }
+
   // Component screenshots
   const seenSig = new Set<string>();
+  const compsToProcess = [];
+  for (const comp of data.components) {
+    const sigKey = `${comp.type}|${comp.subType}|${comp.signature}`;
+    if (!seenSig.has(sigKey) && compsToProcess.length < 200) {
+      seenSig.add(sigKey);
+      compsToProcess.push(comp);
+    }
+  }
+
   let shotCount = 0;
   let compAttempted = 0;
-  const totalComps = Math.min(data.components.length, 200);
-  for (const comp of data.components) {
-    if (shotCount >= 200) break;
+  
+  await runInParallel(compsToProcess, concurrency, async (comp, workerId) => {
+    const p = pages[workerId] || page;
     compAttempted++;
-    process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${data.components.length} (Captured: ${shotCount})`);
-    
-    const sigKey = `${comp.type}|${comp.subType}|${comp.signature}`;
-    if (seenSig.has(sigKey)) continue;
-    seenSig.add(sigKey);
+    process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
     try {
-      const loc = page.locator(`[data-extract-id="${comp.id}"]`).first();
+      const loc = p.locator(`[data-extract-id="${comp.id}"]`).first();
       if (await loc.isVisible({ timeout: 100 })) {
         const box = await loc.boundingBox();
         if (box && box.width > 5 && box.height > 5) {
@@ -210,42 +289,45 @@ async function main() {
           await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
           (comp as any).screenshot = `screenshots/${fname}`;
           shotCount++;
-          process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${data.components.length} (Captured: ${shotCount})`);
+          process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
         }
       }
     } catch {}
-  }
+  });
   console.log(""); // Newline after progress
 
   // Hover state screenshots
   console.log(`📸  Hover screenshots (${data.interactions.hoverStates.length} total)…`);
   let hoverCount = 0;
-  for (const hover of data.interactions.hoverStates) {
+  await runInParallel(data.interactions.hoverStates, concurrency, async (hover, workerId) => {
+    const p = pages[workerId] || page;
     hoverCount++;
     process.stdout.write(`\r    ↳ Capturing hover ${hoverCount}/${data.interactions.hoverStates.length}`);
     try {
-      const loc = page.locator(`[data-extract-id="${hover.componentId}"]`).first();
+      const loc = p.locator(`[data-extract-id="${hover.componentId}"]`).first();
       if (await loc.isVisible({ timeout: 300 })) {
         await loc.hover({ timeout: 500 });
-        await page.waitForTimeout(350);
+        await p.waitForTimeout(350);
         const fname = `${hover.componentId}-hover.png`;
         await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
-        hover.screenshotHover = `screenshots/${fname}`;
-        await page.mouse.move(0, 0);
-        await page.waitForTimeout(200);
+        (hover as any).screenshotHover = `screenshots/${fname}`;
+        await p.mouse.move(0, 0);
+        await p.waitForTimeout(200);
       }
     } catch {}
-  }
+  });
   if (data.interactions.hoverStates.length > 0) console.log("");
 
   // Download image assets
   const totalImages = Math.min(data.assets.images.length, 80);
   console.log(`📦  Downloading image assets (${totalImages} total)…`);
-  for (let i = 0; i < totalImages; i++) {
-    process.stdout.write(`\r    ↳ Downloading image ${i + 1}/${totalImages}`);
-    const img = data.assets.images[i];
+  let downloadedCount = 0;
+  await runInParallel(data.assets.images.slice(0, totalImages), concurrency, async (img, workerId) => {
+    downloadedCount++;
+    process.stdout.write(`\r    ↳ Downloading image ${downloadedCount}/${totalImages}`);
     try {
-      const resp = await page.request.get(img.src, { timeout: 8000 });
+      // Use the context request to fetch in parallel
+      const resp = await ctx.request.get((img as any).src, { timeout: 8000 });
       if (resp.ok()) {
         const ct = resp.headers()["content-type"] || "";
         let ext = "png";
@@ -253,12 +335,12 @@ async function main() {
         else if (ct.includes("webp")) ext = "webp";
         else if (ct.includes("svg")) ext = "svg";
         else if (ct.includes("gif")) ext = "gif";
-        const fname = `image-${i}.${ext}`;
+        const fname = `image-${downloadedCount}.${ext}`;
         fs.writeFileSync(path.join(ASSETS, fname), await resp.body());
         (img as any).localPath = `assets/${fname}`;
       }
     } catch {}
-  }
+  });
   if (totalImages > 0) console.log("");
 
   // Save SVGs
