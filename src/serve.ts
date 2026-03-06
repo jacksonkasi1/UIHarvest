@@ -29,7 +29,7 @@ const app = express();
 const PORT = 3333;
 
 app.use("/output", express.static(OUTPUT));
-app.use(express.static(path.join(ROOT, "web", "dist")));
+app.use(express.static(path.join(ROOT, "public"))); // Serve the HTML UI instead of web/dist
 
 app.get("/api/design-system", (_req, res) => {
   res.json(data);

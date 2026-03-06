@@ -234,30 +234,7 @@ async function main() {
   
   // Create parallel pages if concurrency > 1
   const pages: Page[] = [page];
-  if (concurrency > 1) {
-    console.log(`⚡  Spawning ${concurrency - 1} extra workers for parallel screenshots…`);
-    for (let i = 1; i < concurrency; i++) {
-      const p = await ctx.newPage();
-      try {
-        await p.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await p.evaluate(() => {
-          const elements = document.querySelectorAll("*");
-          for (let j = 0; j < elements.length; j++) {
-            const el = elements[j] as HTMLElement;
-            const style = window.getComputedStyle(el);
-            if (style.position === "fixed" || style.position === "sticky") {
-              el.style.setProperty("position", "absolute", "important");
-            }
-          }
-        });
-        pages.push(p);
-      } catch {
-        // Fallback if worker fails to load
-        pages.push(page); 
-      }
-    }
-  }
-
+  
   // Component screenshots
   const seenSig = new Set<string>();
   const compsToProcess = [];
@@ -272,8 +249,10 @@ async function main() {
   let shotCount = 0;
   let compAttempted = 0;
   
-  await runInParallel(compsToProcess, concurrency, async (comp, workerId) => {
-    const p = pages[workerId] || page;
+  // Use a max concurrency of 1 for DOM-dependent screenshots to prevent Playwright crashes
+  // and because the data-extract-id attributes only exist on the main page.
+  await runInParallel(compsToProcess, 1, async (comp, workerId) => {
+    const p = page;
     compAttempted++;
     process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
     try {
@@ -295,8 +274,8 @@ async function main() {
   // Hover state screenshots
   console.log(`📸  Hover screenshots (${rawData.interactions.hoverStates.length} total)…`);
   let hoverCount = 0;
-  await runInParallel(rawData.interactions.hoverStates as any[], concurrency, async (hover: any, workerId) => {
-    const p = pages[workerId] || page;
+  await runInParallel(rawData.interactions.hoverStates as any[], 1, async (hover: any, workerId) => {
+    const p = page; // Use main page where data-extract-id exists
     hoverCount++;
     process.stdout.write(`\r    ↳ Capturing hover ${hoverCount}/${rawData.interactions.hoverStates.length}`);
     try {
