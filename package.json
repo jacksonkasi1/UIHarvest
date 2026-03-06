@@ -1,0 +1,20 @@
+{
+  "name": "ui-harvest",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "extract": "bun run src/main.ts",
+    "serve": "bun run src/serve.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "bun-types": "^1.1.0"
+  }
+}

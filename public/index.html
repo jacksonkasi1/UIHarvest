@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Design System Explorer</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#09090b;--bg1:#111113;--bg2:#1a1a1f;--bg3:#232329;--bg-hover:#2a2a32;
+  --border:#2a2a32;--border-light:#3a3a44;
+  --text:#e4e4e7;--text2:#a1a1aa;--text3:#63636e;
+  --accent:#7c5cfc;--accent2:#9b7fff;--accent-dim:rgba(124,92,252,.15);
+  --green:#22c55e;--orange:#f59e0b;--red:#ef4444;--blue:#3b82f6;--pink:#ec4899;--cyan:#06b6d4;--yellow:#eab308;
+  --mono:'SF Mono','Fira Code','JetBrains Mono',Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Roboto,sans-serif;
+  --r-sm:6px;--r-md:10px;--r-lg:14px;
+}
+html,body{height:100%;font-family:var(--sans);background:var(--bg0);color:var(--text);font-size:14px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}a:hover{color:var(--accent2)}
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:280px;min-width:280px;background:var(--bg1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border)}
+.sidebar-header h1{font-size:15px;font-weight:700;letter-spacing:-.3px}
+.sidebar-header p{font-size:11px;color:var(--text3);margin-top:4px;word-break:break-all}
+.nav-group{padding:10px 0}
+.nav-group-title{padding:4px 20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3)}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 20px;cursor:pointer;font-size:13px;color:var(--text2);transition:all .12s;border-left:3px solid transparent}
+.nav-item:hover{background:var(--bg-hover);color:var(--text)}
+.nav-item.active{background:var(--bg2);color:var(--text);border-left-color:var(--accent)}
+.nav-item .badge-count{margin-left:auto;font-size:10px;background:var(--bg3);color:var(--text3);padding:1px 6px;border-radius:99px;font-weight:600}
+.nav-icon{width:16px;text-align:center;font-size:13px}
+.main{flex:1;overflow-y:auto;padding:32px 40px;background:var(--bg0)}
+.main-title{font-size:22px;font-weight:700;margin-bottom:6px;letter-spacing:-.4px}
+.main-subtitle{font-size:13px;color:var(--text3);margin-bottom:28px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:28px}
+.stat-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);padding:14px}
+.stat-card .val{font-size:24px;font-weight:700;color:var(--accent)}
+.stat-card .label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+.overview-screenshot{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;max-width:900px;margin-top:16px}
+.overview-screenshot img{width:100%;display:block}
+.color-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px}
+.color-swatch{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;cursor:pointer;transition:border-color .15s}
+.color-swatch:hover{border-color:var(--accent)}
+.color-swatch .preview{height:60px}
+.color-swatch .info{padding:8px 10px}
+.color-swatch .hex{font-size:12px;font-weight:600;font-family:var(--mono)}
+.color-swatch .usage{font-size:10px;color:var(--text3);margin-top:2px}
+.color-swatch .count{font-size:10px;color:var(--text3)}
+.gradient-list{display:flex;flex-direction:column;gap:12px}
+.gradient-item{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.gradient-preview{height:60px}
+.gradient-value{padding:10px;font-size:11px;font-family:var(--mono);color:var(--text3);word-break:break-all}
+.typo-list{display:flex;flex-direction:column;gap:10px}
+.typo-item{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 18px;display:flex;align-items:center;gap:20px}
+.typo-sample{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.typo-meta{font-size:11px;font-family:var(--mono);color:var(--text3);white-space:nowrap;min-width:180px;text-align:right}
+.spacing-list{display:flex;flex-direction:column;gap:6px}
+.spacing-row{display:flex;align-items:center;gap:12px}
+.spacing-bar{height:20px;background:var(--accent);border-radius:3px;min-width:4px;opacity:.7}
+.spacing-label{font-size:12px;font-family:var(--mono);color:var(--text2);min-width:50px}
+.radii-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:16px}
+.radius-item{text-align:center}
+.radius-preview{width:80px;height:80px;border:2px solid var(--accent);margin:0 auto 8px;background:var(--bg2)}
+.radius-value{font-size:12px;font-family:var(--mono);color:var(--text2)}
+.radius-count{font-size:10px;color:var(--text3)}
+.shadow-list{display:flex;flex-direction:column;gap:14px}
+.shadow-item{background:var(--bg2);border-radius:var(--r-md);padding:20px;display:flex;align-items:center;gap:20px}
+.shadow-preview{width:80px;height:60px;background:var(--bg1);border-radius:var(--r-sm);flex-shrink:0}
+.shadow-value{font-size:11px;font-family:var(--mono);color:var(--text3);word-break:break-all;flex:1}
+.shadow-count{font-size:11px;color:var(--text3);white-space:nowrap}
+.token-list{display:flex;flex-direction:column;gap:8px}
+.token-item{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;font-family:var(--mono);font-size:12px;display:flex;gap:12px}
+.token-key{color:var(--accent);min-width:200px}
+.token-val{color:var(--text2);flex:1;word-break:break-all}
+.token-count{color:var(--text3);white-space:nowrap}
+.comp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.comp-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;cursor:pointer;transition:border-color .15s}
+.comp-card:hover{border-color:var(--accent)}
+.comp-card .comp-shot{background:var(--bg2);display:flex;align-items:center;justify-content:center;min-height:70px;max-height:200px;overflow:hidden;border-bottom:1px solid var(--border);padding:10px}
+.comp-card .comp-shot img{max-width:100%;max-height:180px;object-fit:contain}
+.comp-card .comp-body{padding:10px 14px}
+.comp-card .comp-type{font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.comp-card .comp-name{font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.comp-card .comp-dims{font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono)}
+.comp-card .comp-children{font-size:10px;color:var(--text3);margin-top:2px}
+.type-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.sub-tabs{display:flex;gap:4px;margin-bottom:20px;flex-wrap:wrap}
+.sub-tab{font-size:12px;padding:5px 12px;border-radius:99px;cursor:pointer;background:var(--bg2);color:var(--text3);border:1px solid var(--border);transition:all .12s}
+.sub-tab:hover{color:var(--text);border-color:var(--border-light)}
+.sub-tab.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+.section-list{display:flex;flex-direction:column;gap:14px}
+.section-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;cursor:pointer;transition:border-color .15s}
+.section-card:hover{border-color:var(--accent)}
+.section-card .section-shot{border-bottom:1px solid var(--border);overflow:hidden;max-height:300px}
+.section-card .section-shot img{width:100%;display:block}
+.section-card .section-body{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.section-card .section-name{font-size:14px;font-weight:600;flex:1}
+.section-card .section-tag{font-size:10px;font-family:var(--mono);color:var(--text3);background:var(--bg3);padding:2px 8px;border-radius:99px}
+.section-card .section-dims{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.section-card .section-comps{font-size:10px;color:var(--text3)}
+.pattern-list{display:flex;flex-direction:column;gap:16px}
+.pattern-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.pattern-header{padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.pattern-header .pattern-name{font-size:14px;font-weight:600;flex:1}
+.pattern-header .pattern-count{font-size:11px;color:var(--accent);font-weight:600}
+.pattern-body{padding:14px 18px}
+.pattern-structure{font-family:var(--mono);font-size:11px;color:var(--text2);white-space:pre;overflow-x:auto;line-height:1.6;padding:12px;background:var(--bg2);border-radius:var(--r-sm);margin-bottom:12px}
+.pattern-instances{display:flex;gap:8px;flex-wrap:wrap}
+.pattern-instance{font-size:11px;background:var(--bg3);padding:3px 10px;border-radius:99px;color:var(--text2);cursor:pointer}
+.pattern-instance:hover{background:var(--accent-dim);color:var(--accent)}
+.hover-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.hover-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden;cursor:pointer}
+.hover-card:hover{border-color:var(--accent)}
+.hover-shots{display:flex;border-bottom:1px solid var(--border)}
+.hover-shots>div{flex:1;padding:10px;display:flex;align-items:center;justify-content:center;min-height:60px;background:var(--bg2)}
+.hover-shots>div:first-child{border-right:1px solid var(--border)}
+.hover-shots img{max-width:100%;max-height:120px;object-fit:contain}
+.hover-shots .label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;text-align:center;margin-bottom:4px}
+.hover-body{padding:10px 14px}
+.hover-change{font-size:11px;font-family:var(--mono);padding:4px 0;display:flex;gap:8px}
+.hover-change .prop{color:var(--text3);min-width:100px}
+.hover-change .from{color:var(--red)}
+.hover-change .to{color:var(--green)}
+.hover-change .arrow{color:var(--text3)}
+.tree{font-family:var(--mono);font-size:12px;line-height:1.8}
+.tree-node{padding-left:20px;border-left:1px solid var(--border)}
+.tree-label{display:flex;align-items:center;gap:8px;padding:3px 8px;border-radius:var(--r-sm);cursor:pointer}
+.tree-label:hover{background:var(--bg-hover)}
+.tree-toggle{width:16px;font-size:10px;color:var(--text3);cursor:pointer;text-align:center}
+.tree-type-tag{font-size:9px;padding:1px 6px;border-radius:99px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.tree-name{color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.asset-card{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.asset-card .asset-preview{height:110px;display:flex;align-items:center;justify-content:center;background:var(--bg2);padding:8px;border-bottom:1px solid var(--border)}
+.asset-card .asset-preview img{max-width:100%;max-height:100%;object-fit:contain}
+.asset-card .asset-info{padding:8px 10px;font-size:11px;color:var(--text3);font-family:var(--mono)}
+.asset-card .asset-title{font-size:11px;color:var(--text2);margin-bottom:2px}
+.asset-card .asset-reuse{font-size:10px;color:var(--orange)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;display:none;align-items:center;justify-content:center;padding:40px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-lg);max-width:960px;width:100%;max-height:88vh;overflow-y:auto}
+.modal-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--bg1);z-index:1}
+.modal-header h2{flex:1;font-size:16px;font-weight:700}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;width:32px;height:32px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--bg3);color:var(--text)}
+.modal-body{padding:24px}
+.modal-shot{background:var(--bg2);border-radius:var(--r-md);padding:20px;margin-bottom:20px;display:flex;align-items:center;justify-content:center}
+.modal-shot img{max-width:100%;max-height:300px;object-fit:contain}
+.modal-section{margin-bottom:20px}
+.modal-section h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:8px;font-weight:700}
+.style-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+.style-row{display:flex;gap:8px;font-size:12px;padding:6px 10px;background:var(--bg2);border-radius:var(--r-sm)}
+.style-key{color:var(--text3);min-width:120px;font-family:var(--mono)}
+.style-val{color:var(--text);font-family:var(--mono);word-break:break-all}
+.code-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--text2);overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;position:relative}
+.code-copy{position:absolute;top:8px;right:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-size:11px;padding:4px 10px;border-radius:var(--r-sm);cursor:pointer;font-family:var(--mono)}
+.code-copy:hover{background:var(--accent);color:white;border-color:var(--accent)}
+.modal-children{display:flex;flex-wrap:wrap;gap:6px}
+.modal-child-tag{font-size:11px;background:var(--bg3);padding:4px 10px;border-radius:99px;color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:4px}
+.modal-child-tag:hover{background:var(--accent-dim);color:var(--accent)}
+.empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:14px}
+.empty .emoji{font-size:40px;margin-bottom:12px}
+.loading{text-align:center;padding:100px 20px;color:var(--text3)}
+.loading .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border-light)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header"><h1>🎨 Design Extractor</h1><p id="page-url">Loading…</p></div>
+    <nav id="sidebar-nav"></nav>
+  </aside>
+  <main class="main" id="main-content">
+    <div class="loading"><div class="spinner"></div>Loading design system…</div>
+  </main>
+</div>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header"><h2 id="modal-title">Component</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+<script>
+let DS=null,activeTab='overview',activeSubFilter='all';
+const TC={button:'var(--blue)',card:'var(--green)',link:'var(--cyan)','link-arrow':'var(--cyan)',input:'var(--orange)',badge:'var(--pink)',heading:'var(--accent)',text:'var(--text3)','icon-container':'var(--orange)',icon:'var(--orange)','section-header':'var(--green)',navigation:'var(--red)',layout:'var(--accent)',tabs:'var(--yellow)',accordion:'var(--yellow)',testimonial:'var(--pink)','cta-banner':'var(--red)',logo:'var(--cyan)',footer:'var(--text3)'};
+function tc(t){return TC[t]||'var(--text3)'}
+
+async function boot(){
+  try{const r=await fetch('/api/design-system');DS=await r.json();
+    document.getElementById('page-url').textContent=DS.meta.url;
+    document.title=`Design System — ${DS.meta.title}`;
+    buildNav();showTab('overview');
+  }catch(e){document.getElementById('main-content').innerHTML=`<div class="empty"><div class="emoji">❌</div>Failed.<br>${e.message}</div>`}
+}
+
+function buildNav(){
+  const ct={};DS.components.forEach(c=>{ct[c.type]=(ct[c.type]||0)+1});
+  const g=[
+    {t:'General',i:[{id:'overview',ic:'📊',l:'Overview'},{id:'tree',ic:'🌳',l:'Component Tree'}]},
+    {t:'Design Tokens',i:[
+      {id:'colors',ic:'🎨',l:'Colors',c:DS.tokens.colors.length},
+      {id:'gradients',ic:'🌈',l:'Gradients',c:DS.tokens.gradients.length},
+      {id:'typography',ic:'📝',l:'Typography',c:DS.tokens.typography.length},
+      {id:'spacing',ic:'📐',l:'Spacing',c:DS.tokens.spacing.length},
+      {id:'radii',ic:'🔲',l:'Radii',c:DS.tokens.radii.length},
+      {id:'shadows',ic:'🌗',l:'Shadows',c:DS.tokens.shadows.length},
+      {id:'borders',ic:'🔳',l:'Borders',c:DS.tokens.borders.length},
+      {id:'transitions',ic:'⚡',l:'Transitions',c:DS.tokens.transitions.length},
+      {id:'css-vars',ic:'🔧',l:'CSS Variables',c:DS.cssVariables.length},
+      {id:'fonts',ic:'🔤',l:'Font Files',c:DS.fontFaces.length},
+    ]},
+    {t:'Components',i:Object.entries(ct).sort((a,b)=>b[1]-a[1]).map(([type,count])=>({
+      id:'comp-'+type,
+      ic:{button:'🔘',card:'🃏',link:'🔗','link-arrow':'➡️',input:'📥',badge:'🏷️',heading:'🔤',text:'📄','icon-container':'🎯',icon:'✦','section-header':'📋',navigation:'🧭',layout:'📐',tabs:'📑',accordion:'📂',testimonial:'💬','cta-banner':'📣',logo:'🏢',footer:'🦶'}[type]||'📦',
+      l:type.charAt(0).toUpperCase()+type.slice(1).replace(/-/g,' ')+'s',c:count,
+    }))},
+    {t:'Interactions',i:[
+      {id:'hovers',ic:'👆',l:'Hover States',c:DS.interactions.hoverStates.length},
+    ]},
+    {t:'Patterns',i:[{id:'patterns',ic:'🔄',l:'Repeated Patterns',c:DS.patterns.length}]},
+    {t:'Layout',i:[
+      {id:'sections',ic:'📑',l:'Sections',c:DS.sections.length},
+      {id:'layout-system',ic:'📏',l:'Layout System'},
+    ]},
+    {t:'Assets',i:[
+      {id:'images',ic:'🖼️',l:'Images',c:DS.assets.images.length},
+      {id:'svgs',ic:'✨',l:'SVGs / Icons',c:DS.assets.svgs.length},
+      {id:'pseudos',ic:'👻',l:'Pseudo Elements',c:DS.assets.pseudoElements.length},
+      ...(DS.assets.videos.length?[{id:'videos',ic:'🎬',l:'Videos',c:DS.assets.videos.length}]:[]),
+    ]},
+  ];
+  let h='';g.forEach(gr=>{h+=`<div class="nav-group"><div class="nav-group-title">${gr.t}</div>`;
+    gr.i.forEach(it=>{h+=`<div class="nav-item" data-tab="${it.id}" onclick="showTab('${it.id}')"><span class="nav-icon">${it.ic}</span>${it.l}${it.c!=null?`<span class="badge-count">${it.c}</span>`:''}</div>`});
+    h+='</div>'});
+  document.getElementById('sidebar-nav').innerHTML=h;
+}
+
+function showTab(id){
+  activeTab=id;activeSubFilter='all';
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.tab===id));
+  const m=document.getElementById('main-content');
+  const R={overview:renderOverview,tree:renderTree,colors:renderColors,gradients:renderGradients,typography:renderTypography,spacing:renderSpacing,radii:renderRadii,shadows:renderShadows,borders:renderBorders,transitions:renderTransitions,'css-vars':renderCssVars,fonts:renderFonts,hovers:renderHovers,patterns:renderPatterns,sections:renderSections,'layout-system':renderLayoutSystem,images:renderImages,svgs:renderSvgs,pseudos:renderPseudos,videos:renderVideos};
+  if(R[id])m.innerHTML=R[id]();
+  else if(id.startsWith('comp-'))m.innerHTML=renderComponents(id.replace('comp-',''));
+  else m.innerHTML=empty('Unknown tab');
+}
+
+function renderOverview(){
+  const d=DS,ct={};d.components.forEach(c=>{ct[c.type]=(ct[c.type]||0)+1});
+  const total=d.components.length,us=new Set(d.components.map(c=>c.signature)).size;
+  return`<h1 class="main-title">${esc(d.meta.title)}</h1>
+  <p class="main-subtitle">${esc(d.meta.url)}&nbsp;·&nbsp;${d.meta.viewport.width}×${d.meta.fullHeight}px</p>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="val">${d.tokens.colors.length}</div><div class="label">Colors</div></div>
+    <div class="stat-card"><div class="val">${d.tokens.gradients.length}</div><div class="label">Gradients</div></div>
+    <div class="stat-card"><div class="val">${d.tokens.typography.length}</div><div class="label">Typography</div></div>
+    <div class="stat-card"><div class="val">${d.tokens.spacing.length}</div><div class="label">Spacing</div></div>
+    <div class="stat-card"><div class="val">${total}</div><div class="label">Components</div></div>
+    <div class="stat-card"><div class="val">${us}</div><div class="label">Unique Variants</div></div>
+    <div class="stat-card"><div class="val">${d.patterns.length}</div><div class="label">Patterns</div></div>
+    <div class="stat-card"><div class="val">${d.interactions.hoverStates.length}</div><div class="label">Hover States</div></div>
+    <div class="stat-card"><div class="val">${d.sections.length}</div><div class="label">Sections</div></div>
+    <div class="stat-card"><div class="val">${d.assets.images.length+d.assets.svgs.length}</div><div class="label">Assets</div></div>
+    <div class="stat-card"><div class="val">${d.cssVariables.length}</div><div class="label">CSS Variables</div></div>
+    <div class="stat-card"><div class="val">${d.fontFaces.length}</div><div class="label">Font Faces</div></div>
+  </div>
+  <h2 style="font-size:14px;color:var(--text2);margin-bottom:8px">Components by Type</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px">${Object.entries(ct).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<div style="background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="showTab('comp-${t}')"><span class="type-dot" style="background:${tc(t)}"></span><span style="font-size:13px">${t}</span><span style="font-size:12px;color:var(--text3);font-weight:700">${c}</span></div>`).join('')}</div>
+  ${d.fullPageScreenshot?`<h2 style="font-size:14px;color:var(--text2);margin-bottom:8px">Full Page</h2><div class="overview-screenshot"><img src="/output/${d.fullPageScreenshot}" loading="lazy"/></div>`:''}`}
+
+function renderTree(){
+  const roots=DS.components.filter(c=>!c.parentId);
+  return`<h1 class="main-title">Component Tree</h1><p class="main-subtitle">Hierarchical view</p><div class="tree">${roots.map(c=>treeNode(c,0)).join('')}</div>`;
+}
+function treeNode(c,d){
+  const ch=DS.components.filter(x=>x.parentId===c.id);
+  const col=tc(c.type);
+  return`<div class="tree-node" style="padding-left:${d*20}px"><div class="tree-label" onclick="openCompModalById('${c.id}')">
+    <span class="tree-toggle">${ch.length?'▾':'·'}</span><span class="type-dot" style="background:${col}"></span>
+    <span class="tree-type-tag" style="background:${col}22;color:${col}">${c.type}${c.subType!==c.type?'/'+c.subType:''}</span>
+    <span class="tree-name">${esc(c.name)}</span>
+    <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${c.rect.width}×${c.rect.height}</span>
+  </div>${ch.map(x=>treeNode(x,d+1)).join('')}</div>`;
+}
+
+function renderColors(){
+  const c=DS.tokens.colors;if(!c.length)return empty('No colors');
+  return`<h1 class="main-title">Colors</h1><p class="main-subtitle">${c.length} unique colors</p>
+  <div class="color-grid">${c.map(c=>`<div class="color-swatch" onclick="copyText('${c.hex}')" title="Copy ${c.hex}"><div class="preview" style="background:${c.hex}"></div><div class="info"><div class="hex">${c.hex}</div><div class="usage">${c.usages.join(', ')}</div><div class="count">×${c.count}</div></div></div>`).join('')}</div>`}
+
+function renderGradients(){
+  const g=DS.tokens.gradients;if(!g.length)return empty('No gradients');
+  return`<h1 class="main-title">Gradients</h1><p class="main-subtitle">${g.length} gradients</p>
+  <div class="gradient-list">${g.map(gr=>`<div class="gradient-item"><div class="gradient-preview" style="background:${gr.value}"></div><div class="gradient-value">${esc(gr.value)}</div></div>`).join('')}</div>`}
+
+function renderTypography(){
+  const t=DS.tokens.typography;if(!t.length)return empty('No typography');
+  return`<h1 class="main-title">Typography</h1><p class="main-subtitle">${t.length} styles</p>
+  <div class="typo-list">${t.map(t=>`<div class="typo-item"><div class="typo-sample" style="font-size:${t.fontSize};font-weight:${t.fontWeight};font-family:${t.fontFamily};line-height:${t.lineHeight};color:${t.color}${t.textTransform?';text-transform:'+t.textTransform:''}">${esc(t.sample||'Sample')}</div><div class="typo-meta">${t.fontSize} · ${t.fontWeight} · ${t.fontFamily.split(',')[0].replace(/['"]/g,'')}${t.textTransform?' · '+t.textTransform:''}<br>×${t.count}</div></div>`).join('')}</div>`}
+
+function renderSpacing(){
+  const s=DS.tokens.spacing;if(!s.length)return empty('No spacing');const mx=Math.max(...s,1);
+  return`<h1 class="main-title">Spacing</h1><p class="main-subtitle">${s.length} values</p>
+  <div class="spacing-list">${s.map(v=>`<div class="spacing-row"><div class="spacing-label">${v}px</div><div class="spacing-bar" style="width:${Math.max((v/mx)*500,4)}px"></div></div>`).join('')}</div>`}
+
+function renderRadii(){
+  const r=DS.tokens.radii;if(!r.length)return empty('No radii');
+  return`<h1 class="main-title">Border Radii</h1><p class="main-subtitle">${r.length} values</p>
+  <div class="radii-grid">${r.map(r=>`<div class="radius-item"><div class="radius-preview" style="border-radius:${r.value}"></div><div class="radius-value">${r.value}</div><div class="radius-count">×${r.count}</div></div>`).join('')}</div>`}
+
+function renderShadows(){
+  const s=DS.tokens.shadows;if(!s.length)return empty('No shadows');
+  return`<h1 class="main-title">Box Shadows</h1><p class="main-subtitle">${s.length} shadows</p>
+  <div class="shadow-list">${s.map(sh=>`<div class="shadow-item"><div class="shadow-preview" style="box-shadow:${sh.value}"></div><div class="shadow-value">${esc(sh.value)}</div><div class="shadow-count">×${sh.count}</div></div>`).join('')}</div>`}
+
+function renderBorders(){
+  const b=DS.tokens.borders;if(!b.length)return empty('No borders');
+  return`<h1 class="main-title">Borders</h1><p class="main-subtitle">${b.length} border styles</p>
+  <div class="token-list">${b.map(b=>`<div class="token-item"><div class="token-val" style="border-bottom:${b.value};padding-bottom:8px">${esc(b.value)}</div><div class="token-count">×${b.count}</div></div>`).join('')}</div>`}
+
+function renderTransitions(){
+  const t=DS.tokens.transitions;if(!t.length)return empty('No transitions');
+  return`<h1 class="main-title">Transitions</h1><p class="main-subtitle">${t.length} transition definitions</p>
+  <div class="token-list">${t.map(t=>`<div class="token-item"><div class="token-val">${esc(t.value)}</div><div class="token-count">×${t.count}</div></div>`).join('')}</div>`}
+
+function renderCssVars(){
+  const v=DS.cssVariables;if(!v.length)return empty('No CSS variables');
+  return`<h1 class="main-title">CSS Custom Properties</h1><p class="main-subtitle">${v.length} variables</p>
+  <div class="token-list">${v.map(v=>`<div class="token-item">
+    <div class="token-key">${esc(v.name)}</div>
+    <div class="token-val">${v.value.match(/^#[0-9a-f]{3,8}$/i)||v.value.match(/^rgb/)?`<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${v.value};vertical-align:middle;margin-right:6px;border:1px solid var(--border)"></span>`:''} ${esc(v.value)}</div>
+    <div class="token-count" style="font-size:10px">${esc(v.selector)}</div>
+  </div>`).join('')}</div>`}
+
+function renderFonts(){
+  const f=DS.fontFaces;if(!f.length)return empty('No fonts detected');
+  return`<h1 class="main-title">Font Files</h1><p class="main-subtitle">${f.length} font faces</p>
+  <div class="token-list">${f.map(f=>`<div class="token-item">
+    <div class="token-key" style="font-family:'${f.family}',sans-serif;font-weight:${f.weight}">${esc(f.family)}</div>
+    <div class="token-val">weight: ${f.weight} · style: ${f.style}${f.format?' · '+f.format:''}${f.localPath?` · <a href="/output/${f.localPath}" download>Download</a>`:''}</div>
+  </div>`).join('')}</div>`}
+
+function renderHovers(){
+  const h=DS.interactions.hoverStates;if(!h.length)return empty('No hover states captured');
+  return`<h1 class="main-title">Hover States</h1><p class="main-subtitle">${h.length} components with hover changes</p>
+  <div class="hover-grid">${h.map(hv=>{
+    const comp=DS.components.find(c=>c.id===hv.componentId);
+    return`<div class="hover-card" onclick="openCompModalById('${hv.componentId}')">
+      <div class="hover-shots">
+        <div><div class="label">Default</div>${comp?.screenshot?`<img src="/output/${comp.screenshot}"/>`:''}</div>
+        <div><div class="label">Hover</div>${hv.screenshotHover?`<img src="/output/${hv.screenshotHover}"/>`:''}</div>
+      </div>
+      <div class="hover-body">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">${esc(hv.componentName)}<span style="color:var(--text3);font-weight:400"> · ${hv.componentType}</span></div>
+        ${Object.entries(hv.changes).map(([k,v])=>`<div class="hover-change"><span class="prop">${k}</span><span class="from">${esc(v.from)}</span><span class="arrow">→</span><span class="to">${esc(v.to)}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}</div>`}
+
+function renderComponents(type){
+  const all=DS.components.filter(c=>c.type===type);if(!all.length)return empty(`No ${type}s`);
+  const st={};all.forEach(c=>{st[c.subType]=(st[c.subType]||0)+1});
+  const filtered=activeSubFilter==='all'?all:all.filter(c=>c.subType===activeSubFilter);
+  const groups={};filtered.forEach(c=>{if(!groups[c.signature])groups[c.signature]=[];groups[c.signature].push(c)});
+  const variants=Object.values(groups).map(g=>({...g[0],instanceCount:g.length}));
+  const label=type.charAt(0).toUpperCase()+type.slice(1).replace(/-/g,' ')+'s';
+  return`<h1 class="main-title">${label}</h1><p class="main-subtitle">${all.length} total · ${Object.keys(groups).length} variants</p>
+  ${Object.keys(st).length>1?`<div class="sub-tabs"><div class="sub-tab ${activeSubFilter==='all'?'active':''}" onclick="setSubFilter('all','${type}')">All (${all.length})</div>${Object.entries(st).map(([s,c])=>`<div class="sub-tab ${activeSubFilter===s?'active':''}" onclick="setSubFilter('${s}','${type}')">${s} (${c})</div>`).join('')}</div>`:''}
+  <div class="comp-grid">${variants.map(c=>{
+    const ch=DS.components.filter(x=>x.parentId===c.id);const hv=DS.interactions.hoverStates.find(h=>h.componentId===c.id);
+    return`<div class="comp-card" onclick='openCompModalById("${c.id}")'>
+      <div class="comp-shot">${c.screenshot?`<img src="/output/${c.screenshot}" loading="lazy"/>`:hv?.screenshotHover?`<img src="/output/${hv.screenshotHover}" loading="lazy"/>`:`<span style="color:var(--text3);font-size:12px">No screenshot</span>`}</div>
+      <div class="comp-body">
+        <div class="comp-type"><span class="type-dot" style="background:${tc(c.type)}"></span><span style="color:${tc(c.type)}">${c.subType}</span>${c.instanceCount>1?`<span style="color:var(--text3)">· ${c.instanceCount}×</span>`:''}${c.patternId?`<span style="color:var(--orange);font-size:9px">PATTERN</span>`:''}${hv?`<span style="color:var(--blue);font-size:9px">HOVER</span>`:''}</div>
+        <div class="comp-name">${esc(c.name)}</div>
+        <div class="comp-dims">${c.rect.width}×${c.rect.height}px</div>
+        ${ch.length?`<div class="comp-children">↳ ${ch.length} sub-component${ch.length>1?'s':''}</div>`:''}
+      </div>
+    </div>`}).join('')}</div>`}
+
+function setSubFilter(s,t){activeSubFilter=s;document.getElementById('main-content').innerHTML=renderComponents(t)}
+
+function renderPatterns(){
+  const p=DS.patterns;if(!p.length)return empty('No patterns');
+  return`<h1 class="main-title">Repeated Patterns</h1><p class="main-subtitle">${p.length} patterns</p>
+  <div class="pattern-list">${p.map(p=>`<div class="pattern-card">
+    <div class="pattern-header"><div class="pattern-name">${esc(p.name)}</div><div class="pattern-count">${p.instanceCount}×</div></div>
+    <div class="pattern-body">
+      <h3 style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Structure</h3>
+      <div class="pattern-structure">${esc(p.structure)}</div>
+      <h3 style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Instances</h3>
+      <div class="pattern-instances">${p.componentIds.map(id=>{const c=DS.components.find(x=>x.id===id);return c?`<span class="pattern-instance" onclick='openCompModalById("${id}")'>${esc(c.name)}</span>`:''}).join('')}</div>
+      ${p.templateHtml?`<h3 style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">Template</h3><div class="code-block"><button class="code-copy" onclick="event.stopPropagation();copyCode()">Copy</button>${esc(fmtHtml(p.templateHtml))}</div>`:''}</div>
+  </div>`).join('')}</div>`}
+
+function renderSections(){
+  const s=DS.sections;if(!s.length)return empty('No sections');
+  return`<h1 class="main-title">Sections</h1><p class="main-subtitle">${s.length} sections</p>
+  <div class="section-list">${s.map((s,i)=>`<div class="section-card" onclick='openSectionModal(${i})'>
+    ${s.screenshot?`<div class="section-shot"><img src="/output/${s.screenshot}" loading="lazy"/></div>`:''}
+    <div class="section-body"><div class="section-name">${esc(s.name)}</div><span class="section-tag">&lt;${s.tag}&gt;</span><span class="section-dims">${s.rect.width}×${s.rect.height}px</span>${s.childComponentIds?.length?`<span class="section-comps">${s.childComponentIds.length} components</span>`:''}</div>
+  </div>`).join('')}</div>`}
+
+function renderLayoutSystem(){
+  const ls=DS.layoutSystem;
+  return`<h1 class="main-title">Layout System</h1><p class="main-subtitle">Container widths and layout rules</p>
+  <div class="modal-section"><h3>Container Max-Widths</h3>
+  ${ls.containerWidths.length?`<div style="display:flex;gap:10px;flex-wrap:wrap">${ls.containerWidths.map(w=>`<div style="background:var(--bg1);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 16px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--accent)">${w}</div><div style="font-size:10px;color:var(--text3)">px</div></div>`).join('')}</div>`:empty('No container widths detected')}</div>`}
+
+function renderImages(){
+  const i=DS.assets.images;if(!i.length)return empty('No images');
+  return`<h1 class="main-title">Images</h1><p class="main-subtitle">${i.length} images</p>
+  <div class="asset-grid">${i.map(img=>`<div class="asset-card"><div class="asset-preview"><img src="${img.localPath?'/output/'+img.localPath:img.src}" alt="${esc(img.alt)}" loading="lazy" onerror="this.parentElement.innerHTML='⚠️'"/></div><div class="asset-info">${img.alt?`<div class="asset-title">${esc(img.alt)}</div>`:''}${Math.round(img.width)}×${Math.round(img.height)}</div></div>`).join('')}</div>`}
+
+function renderSvgs(){
+  const s=DS.assets.svgs;if(!s.length)return empty('No SVGs');
+  return`<h1 class="main-title">SVGs / Icons</h1><p class="main-subtitle">${s.length} unique SVGs</p>
+  <div class="asset-grid">${s.map((sv,i)=>`<div class="asset-card" onclick='openSvgModal(${i})' style="cursor:pointer"><div class="asset-preview" style="color:var(--text)">${sv.html}</div><div class="asset-info">${sv.title?`<div class="asset-title">${esc(sv.title)}</div>`:''}${Math.round(sv.width)}×${Math.round(sv.height)}${sv.reuseCount>1?`<div class="asset-reuse">reused ×${sv.reuseCount}</div>`:''}</div></div>`).join('')}</div>`}
+
+function renderPseudos(){
+  const p=DS.assets.pseudoElements;if(!p.length)return empty('No pseudo-elements');
+  return`<h1 class="main-title">Pseudo Elements</h1><p class="main-subtitle">${p.length} ::before / ::after elements</p>
+  <div class="token-list">${p.map(pe=>`<div class="token-item"><div class="token-key">${pe.parentTag}${pe.selector}</div><div class="token-val">content: ${esc(pe.content)}${pe.styles.backgroundColor&&pe.styles.backgroundColor!=='rgba(0, 0, 0, 0)'?' · bg: '+pe.styles.backgroundColor:''}${pe.styles.width!=='auto'?' · '+pe.styles.width+' × '+pe.styles.height:''}</div></div>`).join('')}</div>`}
+
+function renderVideos(){
+  const v=DS.assets.videos;if(!v||!v.length)return empty('No videos');
+  return`<h1 class="main-title">Videos</h1><p class="main-subtitle">${v.length} video elements</p>
+  <div class="token-list">${v.map(v=>`<div class="token-item"><div class="token-key">&lt;${v.tag}&gt;</div><div class="token-val">${esc(v.src)} · ${Math.round(v.width)}×${Math.round(v.height)}</div></div>`).join('')}</div>`}
+
+/* MODALS */
+function openCompModalById(id){const c=DS.components.find(x=>x.id===id);if(c)openCompModal(c)}
+function openCompModal(c){
+  document.getElementById('modal-title').innerHTML=`<span class="type-dot" style="background:${tc(c.type)};width:10px;height:10px;display:inline-block;border-radius:50%;margin-right:6px"></span>${c.type}/${c.subType}: ${esc(c.name)}`;
+  const ch=DS.components.filter(x=>x.parentId===c.id),pa=c.parentId?DS.components.find(x=>x.id===c.parentId):null,pt=c.patternId?DS.patterns.find(p=>p.id===c.patternId):null,hv=DS.interactions.hoverStates.find(h=>h.componentId===c.id);
+  const b=document.getElementById('modal-body');
+  b.innerHTML=`
+    ${c.screenshot?`<div class="modal-shot"><img src="/output/${c.screenshot}"/></div>`:''}
+    ${hv?`<div class="modal-section"><h3>Hover State</h3><div style="display:flex;gap:12px;margin-bottom:12px">${c.screenshot?`<div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px">DEFAULT</div><img src="/output/${c.screenshot}" style="max-height:100px;border-radius:var(--r-sm)"/></div>`:''}${hv.screenshotHover?`<div style="flex:1;text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px">HOVER</div><img src="/output/${hv.screenshotHover}" style="max-height:100px;border-radius:var(--r-sm)"/></div>`:''}</div>${Object.entries(hv.changes).map(([k,v])=>`<div class="hover-change"><span class="prop">${k}</span><span class="from">${esc(v.from)}</span><span class="arrow">→</span><span class="to">${esc(v.to)}</span></div>`).join('')}</div>`:''}
+    <div class="modal-section"><h3>Info</h3><div class="style-grid">
+      <div class="style-row"><span class="style-key">type</span><span class="style-val">${c.type} / ${c.subType}</span></div>
+      <div class="style-row"><span class="style-key">size</span><span class="style-val">${c.rect.width}×${c.rect.height}px</span></div>
+      <div class="style-row"><span class="style-key">position</span><span class="style-val">(${c.rect.x}, ${c.rect.y})</span></div>
+      ${pa?`<div class="style-row"><span class="style-key">parent</span><span class="style-val" style="cursor:pointer;color:var(--accent)" onclick="openCompModalById('${pa.id}')">${esc(pa.type)}: ${esc(pa.name)}</span></div>`:''}
+      ${pt?`<div class="style-row"><span class="style-key">pattern</span><span class="style-val" style="color:var(--orange)">${esc(pt.name)} (${pt.instanceCount}×)</span></div>`:''}
+      ${Object.entries(c.dataAttributes||{}).map(([k,v])=>`<div class="style-row"><span class="style-key">${k}</span><span class="style-val">${esc(v)}</span></div>`).join('')}
+    </div></div>
+    ${ch.length?`<div class="modal-section"><h3>Sub-Components (${ch.length})</h3><div class="modal-children">${ch.map(x=>`<span class="modal-child-tag" onclick="openCompModalById('${x.id}')"><span class="type-dot" style="background:${tc(x.type)};width:6px;height:6px"></span>${esc(x.type)}: ${esc(x.name)}</span>`).join('')}</div></div>`:''}
+    <div class="modal-section"><h3>Computed Styles</h3><div class="style-grid">${Object.entries(c.styles||{}).filter(([k,v])=>v&&v!=='none'&&v!=='normal'&&v!=='0px'&&v!=='').map(([k,v])=>`<div class="style-row"><span class="style-key">${k}</span><span class="style-val">${esc(String(v))}</span></div>`).join('')}</div></div>
+    <div class="modal-section"><h3>HTML</h3><div class="code-block" id="comp-code"><button class="code-copy" onclick="event.stopPropagation();copyCode()">Copy</button>${esc(fmtHtml(c.html))}</div></div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function openSectionModal(i){
+  const s=DS.sections[i];document.getElementById('modal-title').textContent=s.name;
+  const ci=s.childComponentIds?s.childComponentIds.map(id=>DS.components.find(c=>c.id===id)).filter(Boolean):[];
+  const bt={};ci.forEach(c=>{if(!bt[c.type])bt[c.type]=[];bt[c.type].push(c)});
+  document.getElementById('modal-body').innerHTML=`
+    ${s.screenshot?`<div class="modal-shot"><img src="/output/${s.screenshot}" style="max-height:400px"/></div>`:''}
+    <div class="modal-section"><h3>Info</h3><div class="style-grid">
+      <div class="style-row"><span class="style-key">tag</span><span class="style-val">&lt;${s.tag}&gt;</span></div>
+      <div class="style-row"><span class="style-key">size</span><span class="style-val">${s.rect.width}×${s.rect.height}px</span></div>
+      ${Object.entries(s.dataAttributes||{}).map(([k,v])=>`<div class="style-row"><span class="style-key">${k}</span><span class="style-val">${esc(v)}</span></div>`).join('')}
+      ${Object.entries(s.styles||{}).map(([k,v])=>`<div class="style-row"><span class="style-key">${k}</span><span class="style-val">${esc(String(v))}</span></div>`).join('')}
+    </div></div>
+    ${ci.length?`<div class="modal-section"><h3>Components (${ci.length})</h3>${Object.entries(bt).map(([t,cs])=>`<div style="margin-bottom:8px"><span style="font-size:11px;color:${tc(t)};font-weight:600;text-transform:uppercase">${t} (${cs.length})</span><div class="modal-children" style="margin-top:4px">${cs.map(c=>`<span class="modal-child-tag" onclick="openCompModalById('${c.id}')"><span class="type-dot" style="background:${tc(c.type)};width:6px;height:6px"></span>${esc(c.name)}</span>`).join('')}</div></div>`).join('')}</div>`:''}`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function openSvgModal(i){
+  const s=DS.assets.svgs[i];document.getElementById('modal-title').textContent=s.title||`SVG #${i}`;
+  document.getElementById('modal-body').innerHTML=`
+    <div class="modal-shot" style="color:var(--text)">${s.html}</div>
+    <div class="modal-section"><h3>Info</h3><div class="style-grid">
+      <div class="style-row"><span class="style-key">title</span><span class="style-val">${s.title||'—'}</span></div>
+      <div class="style-row"><span class="style-key">viewBox</span><span class="style-val">${s.viewBox||'—'}</span></div>
+      <div class="style-row"><span class="style-key">size</span><span class="style-val">${Math.round(s.width)}×${Math.round(s.height)}px</span></div>
+      ${s.reuseCount>1?`<div class="style-row"><span class="style-key">reused</span><span class="style-val" style="color:var(--orange)">${s.reuseCount} times</span></div>`:''}
+    </div></div>
+    <div class="modal-section"><h3>SVG Code</h3><div class="code-block"><button class="code-copy" onclick="event.stopPropagation();copyCode()">Copy</button>${esc(fmtHtml(s.html))}</div></div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function empty(m){return`<div class="empty"><div class="emoji">📭</div>${m}</div>`}
+function fmtHtml(h){let i=0;return h.replace(/></g,'>\n<').split('\n').map(l=>{l=l.trim();if(l.startsWith('</'))i=Math.max(i-1,0);const r='  '.repeat(i)+l;if(l.startsWith('<')&&!l.startsWith('</')&&!l.endsWith('/>')&&!l.includes('</'))i++;return r}).join('\n')}
+function copyText(t){navigator.clipboard.writeText(t)}
+function copyCode(){const b=document.querySelector('#modal.open .code-block');if(b){navigator.clipboard.writeText(b.textContent.replace('Copy','').trim())}}
+
+boot();
+</script>
+</body>
+</html>
