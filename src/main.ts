@@ -110,8 +110,12 @@ async function main() {
 
   // Full page screenshot
   console.log("\n📸  Screenshots…");
-  await page.screenshot({ path: path.join(SHOTS, "full-page.png"), fullPage: true, type: "png" });
-  (data as any).fullPageScreenshot = "screenshots/full-page.png";
+  try {
+    await page.screenshot({ path: path.join(SHOTS, "full-page.png"), fullPage: true, type: "png", timeout: 90000, animations: "disabled" });
+    (data as any).fullPageScreenshot = "screenshots/full-page.png";
+  } catch (err) {
+    console.log("⚠️   Full page screenshot failed, skipping…", err);
+  }
 
   // Section screenshots
   for (const sec of data.sections) {
@@ -119,7 +123,7 @@ async function main() {
       const loc = page.locator(`[data-extract-id="${sec.id}"]`).first();
       if (await loc.isVisible({ timeout: 300 })) {
         const fname = `${sec.id}.png`;
-        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png" });
+        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
         (sec as any).screenshot = `screenshots/${fname}`;
       }
     } catch {}
@@ -139,7 +143,7 @@ async function main() {
         const box = await loc.boundingBox();
         if (box && box.width > 5 && box.height > 5) {
           const fname = `${comp.id}.png`;
-          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png" });
+          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
           (comp as any).screenshot = `screenshots/${fname}`;
           shotCount++;
         }
@@ -156,7 +160,7 @@ async function main() {
         await loc.hover({ timeout: 500 });
         await page.waitForTimeout(350);
         const fname = `${hover.componentId}-hover.png`;
-        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png" });
+        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
         hover.screenshotHover = `screenshots/${fname}`;
         await page.mouse.move(0, 0);
         await page.waitForTimeout(200);
