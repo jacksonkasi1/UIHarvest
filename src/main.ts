@@ -58,7 +58,60 @@ async function main() {
   } catch {
     console.log("⚠️   networkidle timeout, continuing…");
   }
-  await page.waitForTimeout(2000);
+
+  // Scroll to trigger lazy load and animations
+  console.log("📜  Scrolling page to trigger lazy loading…");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => {
+      let totalHeight = 0;
+      const distance = 400;
+      const timer = setInterval(() => {
+        const scrollHeight = document.body.scrollHeight;
+        window.scrollBy(0, distance);
+        totalHeight += distance;
+        if (totalHeight >= scrollHeight) {
+          clearInterval(timer);
+          window.scrollTo(0, 0);
+          resolve();
+        }
+      }, 150); // Slower scroll to allow fetching
+    });
+  });
+
+  // Wait for any newly triggered requests to finish
+  try {
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  } catch {}
+
+  console.log("⏳  Waiting for fonts and images to complete…");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(
+      Array.from(document.images).map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = img.onerror = resolve;
+          setTimeout(resolve, 10000); // 10s Timeout for very slow images
+        });
+      })
+    );
+  });
+
+  // Final pause for hydration and layout shifts
+  await page.waitForTimeout(3000);
+
+  // Fix sticky/fixed elements before screenshots
+  console.log("🛠️   Adjusting fixed elements for full-page screenshot…");
+  await page.evaluate(() => {
+    const elements = document.querySelectorAll("*");
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i] as HTMLElement;
+      const style = window.getComputedStyle(el);
+      if (style.position === "fixed" || style.position === "sticky") {
+        el.style.setProperty("position", "absolute", "important");
+      }
+    }
+  });
 
   // Dismiss cookie banners
   for (const sel of [
@@ -109,51 +162,67 @@ async function main() {
   console.log(`    Containers:  ${data.layoutSystem.containerWidths.join(", ")}px`);
 
   // Full page screenshot
-  console.log("\n📸  Screenshots…");
+  console.log("\n📸  Full page screenshot…");
   try {
-    await page.screenshot({ path: path.join(SHOTS, "full-page.png"), fullPage: true, type: "png", timeout: 90000, animations: "disabled" });
+    await page.screenshot({ path: path.join(SHOTS, "full-page.png"), fullPage: true, type: "png", timeout: 45000, animations: "disabled" });
     (data as any).fullPageScreenshot = "screenshots/full-page.png";
   } catch (err) {
     console.log("⚠️   Full page screenshot failed, skipping…", err);
   }
 
+  console.log(`📸  Section screenshots (${data.sections.length} total)…`);
   // Section screenshots
+  let secCount = 0;
   for (const sec of data.sections) {
+    secCount++;
+    process.stdout.write(`\r    ↳ Capturing section ${secCount}/${data.sections.length}`);
     try {
       const loc = page.locator(`[data-extract-id="${sec.id}"]`).first();
-      if (await loc.isVisible({ timeout: 300 })) {
+      if (await loc.isVisible({ timeout: 100 })) {
         const fname = `${sec.id}.png`;
-        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
+        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
         (sec as any).screenshot = `screenshots/${fname}`;
       }
     } catch {}
   }
+  console.log(""); // Newline after progress
 
+  console.log(`📸  Component screenshots (up to 200)…`);
   // Component screenshots
   const seenSig = new Set<string>();
   let shotCount = 0;
+  let compAttempted = 0;
+  const totalComps = Math.min(data.components.length, 200);
   for (const comp of data.components) {
-    if (shotCount > 200) break;
+    if (shotCount >= 200) break;
+    compAttempted++;
+    process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${data.components.length} (Captured: ${shotCount})`);
+    
     const sigKey = `${comp.type}|${comp.subType}|${comp.signature}`;
     if (seenSig.has(sigKey)) continue;
     seenSig.add(sigKey);
     try {
       const loc = page.locator(`[data-extract-id="${comp.id}"]`).first();
-      if (await loc.isVisible({ timeout: 300 })) {
+      if (await loc.isVisible({ timeout: 100 })) {
         const box = await loc.boundingBox();
         if (box && box.width > 5 && box.height > 5) {
           const fname = `${comp.id}.png`;
-          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 15000, animations: "disabled" });
+          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
           (comp as any).screenshot = `screenshots/${fname}`;
           shotCount++;
+          process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${data.components.length} (Captured: ${shotCount})`);
         }
       }
     } catch {}
   }
+  console.log(""); // Newline after progress
 
   // Hover state screenshots
-  console.log("📸  Hover screenshots…");
+  console.log(`📸  Hover screenshots (${data.interactions.hoverStates.length} total)…`);
+  let hoverCount = 0;
   for (const hover of data.interactions.hoverStates) {
+    hoverCount++;
+    process.stdout.write(`\r    ↳ Capturing hover ${hoverCount}/${data.interactions.hoverStates.length}`);
     try {
       const loc = page.locator(`[data-extract-id="${hover.componentId}"]`).first();
       if (await loc.isVisible({ timeout: 300 })) {
@@ -167,10 +236,13 @@ async function main() {
       }
     } catch {}
   }
+  if (data.interactions.hoverStates.length > 0) console.log("");
 
   // Download image assets
-  console.log("📦  Downloading assets…");
-  for (let i = 0; i < Math.min(data.assets.images.length, 80); i++) {
+  const totalImages = Math.min(data.assets.images.length, 80);
+  console.log(`📦  Downloading image assets (${totalImages} total)…`);
+  for (let i = 0; i < totalImages; i++) {
+    process.stdout.write(`\r    ↳ Downloading image ${i + 1}/${totalImages}`);
     const img = data.assets.images[i];
     try {
       const resp = await page.request.get(img.src, { timeout: 8000 });
@@ -187,6 +259,7 @@ async function main() {
       }
     } catch {}
   }
+  if (totalImages > 0) console.log("");
 
   // Save SVGs
   for (let i = 0; i < Math.min(data.assets.svgs.length, 80); i++) {

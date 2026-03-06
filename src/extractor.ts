@@ -14,23 +14,8 @@ export interface DesignSystemData {
 }
 
 export async function extractDesignSystem(page: Page): Promise<DesignSystemData> {
-  // ── Step 1: Scroll to trigger lazy load ──
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve) => {
-      let total = 0;
-      const step = 400;
-      const timer = setInterval(() => {
-        window.scrollBy(0, step);
-        total += step;
-        if (total >= document.body.scrollHeight + 1000) {
-          clearInterval(timer);
-          window.scrollTo(0, 0);
-          setTimeout(resolve, 800);
-        }
-      }, 80);
-    });
-  });
-  await page.waitForTimeout(2000);
+  // ── Step 1: Wait for rendering to settle ──
+  await page.waitForTimeout(1000);
 
   // ── Step 2: Extract font files ──
   const fontFaces = await page.evaluate(() => {
