@@ -209,7 +209,7 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       }, 60);
     });
   });
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(4000);
 
   // Step 2: Extract font faces
   const fontFaces = await extractFontFaces(page);

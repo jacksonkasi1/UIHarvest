@@ -83,7 +83,7 @@ async function main() {
 
   console.log("📄  Loading page…");
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
   } catch {
     console.log("⚠️   navigation timeout, continuing…");
   }
@@ -123,7 +123,7 @@ async function main() {
 
   // Wait for any newly triggered requests to finish
   try {
-    await page.waitForLoadState("networkidle", { timeout: 10000 });
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
   } catch {}
 
   console.log("⏳  Waiting for fonts and images to complete…");
@@ -134,14 +134,15 @@ async function main() {
         if (img.complete) return Promise.resolve();
         return new Promise((resolve) => {
           img.onload = img.onerror = resolve;
-          setTimeout(resolve, 5000); // 5s Timeout for very slow images
+          setTimeout(resolve, 8000); // 8s Timeout for very slow images
         });
       })
     );
   });
 
   // Final pause for hydration and layout shifts
-  await page.waitForTimeout(1000);
+  console.log("⏳  Waiting an extra 5 seconds for final layout settling…");
+  await page.waitForTimeout(6000);
 
   // Fix sticky/fixed elements before screenshots
   console.log("🛠️   Adjusting fixed elements for full-page screenshot…");
