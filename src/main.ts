@@ -1,10 +1,11 @@
+import "dotenv/config";
 import { chromium, Page, BrowserContext } from "playwright";
-import express from "express";
 import path from "path";
 import fs from "fs";
-import { exec } from "child_process";
 import os from "os";
 import { extractDesignSystem } from "./extractor.js";
+import { DesignAnalyzer } from "./analyzer.js";
+import { startServer } from "./server.js";
 
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "output");
@@ -14,11 +15,6 @@ const FONTS = path.join(OUTPUT, "fonts");
 
 function ensureDirs() {
   [OUTPUT, SHOTS, ASSETS, FONTS].forEach((d) => fs.mkdirSync(d, { recursive: true }));
-}
-
-function openBrowser(url: string) {
-  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  exec(`${cmd} ${url}`);
 }
 
 async function runInParallel<T>(items: T[], concurrency: number, fn: (item: T, workerId: number) => Promise<void>) {
@@ -97,7 +93,7 @@ async function main() {
   await page.evaluate(async () => {
     // Override IntersectionObserver to fire immediately
     const OriginalObserver = window.IntersectionObserver;
-    window.IntersectionObserver = function (callback, options) {
+    window.IntersectionObserver = function (callback: any, options: any) {
       const observer = new OriginalObserver(callback, options);
       const originalObserve = observer.observe.bind(observer);
       observer.observe = (element) => {
@@ -175,54 +171,54 @@ async function main() {
 
   // Extract
   console.log("🔬  Extracting design system…");
-  const data = await extractDesignSystem(page);
+  const rawData = await extractDesignSystem(page);
 
   // Summary
   const compTypes: Record<string, number> = {};
-  data.components.forEach((c: any) => {
+  rawData.components.forEach((c: any) => {
     const key = `${c.type}/${c.subType}`;
     compTypes[key] = (compTypes[key] || 0) + 1;
   });
   console.log("\n📊  Extraction Summary:");
-  console.log(`    Colors:      ${data.tokens.colors.length}`);
-  console.log(`    Gradients:   ${data.tokens.gradients.length}`);
-  console.log(`    Typography:  ${data.tokens.typography.length}`);
-  console.log(`    Spacing:     ${data.tokens.spacing.length}`);
-  console.log(`    Radii:       ${data.tokens.radii.length}`);
-  console.log(`    Shadows:     ${data.tokens.shadows.length}`);
-  console.log(`    Borders:     ${data.tokens.borders.length}`);
-  console.log(`    Transitions: ${data.tokens.transitions.length}`);
-  console.log(`    Components:  ${data.components.length}`);
+  console.log(`    Colors:      ${rawData.tokens.colors.length}`);
+  console.log(`    Gradients:   ${rawData.tokens.gradients.length}`);
+  console.log(`    Typography:  ${rawData.tokens.typography.length}`);
+  console.log(`    Spacing:     ${rawData.tokens.spacing.length}`);
+  console.log(`    Radii:       ${rawData.tokens.radii.length}`);
+  console.log(`    Shadows:     ${rawData.tokens.shadows.length}`);
+  console.log(`    Borders:     ${rawData.tokens.borders.length}`);
+  console.log(`    Transitions: ${rawData.tokens.transitions.length}`);
+  console.log(`    Components:  ${rawData.components.length}`);
   Object.entries(compTypes).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => {
     console.log(`      ${k}: ${v}`);
   });
-  console.log(`    Patterns:    ${data.patterns.length}`);
-  console.log(`    Sections:    ${data.sections.length}`);
-  console.log(`    Images:      ${data.assets.images.length}`);
-  console.log(`    SVGs:        ${data.assets.svgs.length}`);
-  console.log(`    Videos:      ${data.assets.videos.length}`);
-  console.log(`    Pseudos:     ${data.assets.pseudoElements.length}`);
-  console.log(`    Hovers:      ${data.interactions.hoverStates.length}`);
-  console.log(`    CSS Vars:    ${data.cssVariables.length}`);
+  console.log(`    Patterns:    ${rawData.patterns.length}`);
+  console.log(`    Sections:    ${rawData.sections.length}`);
+  console.log(`    Images:      ${rawData.assets.images.length}`);
+  console.log(`    SVGs:        ${rawData.assets.svgs.length}`);
+  console.log(`    Videos:      ${rawData.assets.videos.length}`);
+  console.log(`    Pseudos:     ${rawData.assets.pseudoElements.length}`);
+  console.log(`    Hovers:      ${rawData.interactions.hoverStates.length}`);
+  console.log(`    CSS Vars:    ${rawData.cssVariables.length}`);
   console.log(`    Font Files:  ${fontFiles.length}`);
-  console.log(`    Font Faces:  ${data.fontFaces.length}`);
-  console.log(`    Containers:  ${data.layoutSystem.containerWidths.join(", ")}px`);
+  console.log(`    Font Faces:  ${rawData.fontFaces.length}`);
+  console.log(`    Containers:  ${rawData.layoutSystem.containerWidths.join(", ")}px`);
 
   // Full page screenshot
   console.log("\n📸  Full page screenshot…");
   try {
     await page.screenshot({ path: path.join(SHOTS, "full-page.png"), fullPage: true, type: "png", timeout: 45000, animations: "disabled" });
-    (data as any).fullPageScreenshot = "screenshots/full-page.png";
+    (rawData as any).fullPageScreenshot = "screenshots/full-page.png";
   } catch (err) {
     console.log("⚠️   Full page screenshot failed, skipping…", err);
   }
 
-  console.log(`📸  Section screenshots (${data.sections.length} total)…`);
+  console.log(`📸  Section screenshots (${rawData.sections.length} total)…`);
   // Section screenshots
   let secCount = 0;
-  for (const sec of data.sections) {
+  for (const sec of rawData.sections) {
     secCount++;
-    process.stdout.write(`\r    ↳ Capturing section ${secCount}/${data.sections.length}`);
+    process.stdout.write(`\r    ↳ Capturing section ${secCount}/${rawData.sections.length}`);
     try {
       const loc = page.locator(`[data-extract-id="${sec.id}"]`).first();
       if (await loc.isVisible({ timeout: 100 })) {
@@ -265,7 +261,7 @@ async function main() {
   // Component screenshots
   const seenSig = new Set<string>();
   const compsToProcess = [];
-  for (const comp of data.components) {
+  for (const comp of rawData.components) {
     const sigKey = `${comp.type}|${comp.subType}|${comp.signature}`;
     if (!seenSig.has(sigKey) && compsToProcess.length < 200) {
       seenSig.add(sigKey);
@@ -297,12 +293,12 @@ async function main() {
   console.log(""); // Newline after progress
 
   // Hover state screenshots
-  console.log(`📸  Hover screenshots (${data.interactions.hoverStates.length} total)…`);
+  console.log(`📸  Hover screenshots (${rawData.interactions.hoverStates.length} total)…`);
   let hoverCount = 0;
-  await runInParallel(data.interactions.hoverStates, concurrency, async (hover, workerId) => {
+  await runInParallel(rawData.interactions.hoverStates as any[], concurrency, async (hover: any, workerId) => {
     const p = pages[workerId] || page;
     hoverCount++;
-    process.stdout.write(`\r    ↳ Capturing hover ${hoverCount}/${data.interactions.hoverStates.length}`);
+    process.stdout.write(`\r    ↳ Capturing hover ${hoverCount}/${rawData.interactions.hoverStates.length}`);
     try {
       const loc = p.locator(`[data-extract-id="${hover.componentId}"]`).first();
       if (await loc.isVisible({ timeout: 300 })) {
@@ -316,13 +312,13 @@ async function main() {
       }
     } catch {}
   });
-  if (data.interactions.hoverStates.length > 0) console.log("");
+  if (rawData.interactions.hoverStates.length > 0) console.log("");
 
   // Download image assets
-  const totalImages = Math.min(data.assets.images.length, 80);
+  const totalImages = Math.min(rawData.assets.images.length, 80);
   console.log(`📦  Downloading image assets (${totalImages} total)…`);
   let downloadedCount = 0;
-  await runInParallel(data.assets.images.slice(0, totalImages), concurrency, async (img, workerId) => {
+  await runInParallel(rawData.assets.images.slice(0, totalImages), concurrency, async (img, workerId) => {
     downloadedCount++;
     process.stdout.write(`\r    ↳ Downloading image ${downloadedCount}/${totalImages}`);
     try {
@@ -344,8 +340,8 @@ async function main() {
   if (totalImages > 0) console.log("");
 
   // Save SVGs
-  for (let i = 0; i < Math.min(data.assets.svgs.length, 80); i++) {
-    const svg = data.assets.svgs[i];
+  for (let i = 0; i < Math.min(rawData.assets.svgs.length, 80); i++) {
+    const svg = rawData.assets.svgs[i];
     const fname = `icon-${i}.svg`;
     fs.writeFileSync(path.join(ASSETS, fname), svg.html);
     (svg as any).localPath = `assets/${fname}`;
@@ -357,29 +353,52 @@ async function main() {
     const ext = f.url.match(/\.(woff2?|ttf|otf|eot)/)?.[1] || "woff2";
     const fname = `font-${i}.${ext}`;
     fs.writeFileSync(path.join(FONTS, fname), f.body);
-    if (data.fontFaces[i]) (data.fontFaces[i] as any).localPath = `fonts/${fname}`;
+    if (rawData.fontFaces[i]) (rawData.fontFaces[i] as any).localPath = `fonts/${fname}`;
   }
 
-  // Save JSON
+  await browser.close();
+
+  // ══════════════════════════════════════════════
+  // PHASE 2: AI ANALYSIS
+  // ══════════════════════════════════════════════
+
+  const analyzer = new DesignAnalyzer(rawData);
+  let analysis: any = null;
+
+  if (analyzer.isAiAvailable) {
+    console.log("\n🤖  Phase 2: AI Analysis…\n");
+    try {
+      analysis = await analyzer.analyze();
+      console.log(`\n  ✅  AI Analysis complete`);
+      console.log(`      API calls: ${analysis.aiUsage.calls}`);
+      console.log(`      Tokens:    ${analysis.aiUsage.tokens.toLocaleString()}`);
+      console.log(`      Cost:      $${analysis.aiUsage.cost}`);
+      console.log(`      Named colors:    ${analysis.namedTokens.colors.length}`);
+      console.log(`      Named spacing:   ${analysis.namedTokens.spacing.length}`);
+      console.log(`      Named typography: ${analysis.namedTokens.typography.length}`);
+      console.log(`      Components:      ${analysis.componentLibrary.length}`);
+      console.log(`      Total variants:  ${analysis.componentLibrary.reduce((s: number, c: any) => s + c.variants.length, 0)}`);
+      console.log(`      Sections:        ${analysis.sectionBlueprint.length}`);
+      console.log(`      Code snippets:   ${analysis.codeSnippets.length}`);
+    } catch (err) {
+      console.error("  ❌  AI Analysis failed:", (err as Error).message);
+    }
+  } else {
+    console.log("\n⏭️   Skipping AI analysis (no OPENAI_API_KEY set)\n");
+  }
+
+  // ── Combine & Save ──
+  const finalData = {
+    ...rawData,
+    analysis: analysis || null,
+  };
+
   const jsonPath = path.join(OUTPUT, "design-system.json");
-  fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
+  fs.writeFileSync(jsonPath, JSON.stringify(finalData, null, 2));
   console.log(`\n✅  Saved → ${jsonPath}`);
 
-  await browser.close();
-  startServer(data);
-}
-
-function startServer(data: any) {
-  const app = express();
-  const PORT = 3333;
-  app.use("/output", express.static(OUTPUT));
-  app.use(express.static(path.join(ROOT, "public")));
-  app.get("/api/design-system", (_req, res) => res.json(data));
-  app.listen(PORT, () => {
-    const url2 = `http://localhost:${PORT}`;
-    console.log(`\n🎨  Design Explorer → ${url2}\n`);
-    openBrowser(url2);
-  });
+  // ── Start Server ──
+  startServer(finalData, OUTPUT, ROOT);
 }
 
 main().catch((err) => {
