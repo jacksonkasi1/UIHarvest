@@ -1553,6 +1553,8 @@ async function extractCssVariables(page: Page): Promise<CssVariable[]> {
   return page.evaluate(() => {
     const vars: any[] = [];
     const seen = new Set<string>();
+
+    // Strategy 1: same-origin stylesheets (may throw SecurityError on cross-origin)
     try {
       Array.from(document.styleSheets).forEach((sheet) => {
         try {
@@ -1573,15 +1575,62 @@ async function extractCssVariables(page: Page): Promise<CssVariable[]> {
         } catch {}
       });
     } catch {}
-    document.querySelectorAll("[data-theme]").forEach((el) => {
-      const theme = el.getAttribute("data-theme") || "";
-      const key = `--data-theme-${theme}`;
-      if (theme && !seen.has(key)) {
-        seen.add(key);
-        vars.push({ name: `[data-theme="${theme}"]`, value: theme, selector: "data-attribute" });
+
+    // Strategy 2: getComputedStyle on :root — works even for cross-origin sheets
+    // that have already been applied to the document. We probe known --var patterns.
+    try {
+      const rootStyle = getComputedStyle(document.documentElement);
+      for (let i = 0; i < rootStyle.length; i++) {
+        const prop = rootStyle[i];
+        if (prop.startsWith("--")) {
+          const val = rootStyle.getPropertyValue(prop).trim();
+          if (val && !seen.has(prop)) {
+            seen.add(prop);
+            vars.push({ name: prop, value: val, selector: ":root" });
+          }
+        }
       }
-    });
-    return vars.slice(0, 200);
+    } catch {}
+
+    // Strategy 3: Scan all elements for inline CSS variables (style attributes)
+    try {
+      document.querySelectorAll("[style]").forEach((el) => {
+        const inlineStyle = (el as HTMLElement).style;
+        for (let i = 0; i < inlineStyle.length; i++) {
+          const prop = inlineStyle[i];
+          if (prop.startsWith("--")) {
+            const val = inlineStyle.getPropertyValue(prop).trim();
+            if (val && !seen.has(prop)) {
+              seen.add(prop);
+              const tag = el.tagName.toLowerCase();
+              const id = el.id ? `#${el.id}` : "";
+              vars.push({ name: prop, value: val, selector: `${tag}${id}[style]` });
+            }
+          }
+        }
+      });
+    } catch {}
+
+    // Strategy 4: Scan data-theme / data-color-scheme elements — applied CSS vars
+    try {
+      const themeEls = document.querySelectorAll("[data-theme],[data-color-scheme],[data-mode]");
+      themeEls.forEach((el) => {
+        const cs = getComputedStyle(el as HTMLElement);
+        for (let i = 0; i < cs.length; i++) {
+          const prop = cs[i];
+          if (prop.startsWith("--")) {
+            const val = cs.getPropertyValue(prop).trim();
+            const key = `${prop}@${el.getAttribute("data-theme") || el.getAttribute("data-color-scheme") || ""}`;
+            if (val && !seen.has(key)) {
+              seen.add(key);
+              vars.push({ name: prop, value: val, selector: `[data-theme="${el.getAttribute("data-theme") || ""}"]` });
+            }
+          }
+        }
+      });
+    } catch {}
+
+    return vars.slice(0, 300);
   });
 }
 

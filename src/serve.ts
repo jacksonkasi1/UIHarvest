@@ -23,8 +23,21 @@ if (!fs.existsSync(dataPath)) {
   process.exit(1);
 }
 
+const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
+
 const app = express();
 const PORT = process.env.PORT || 3333;
+
+// Serve the output directory (screenshots, assets, fonts, JSON) at /output/
+app.use("/output", express.static(OUTPUT));
+
+// Serve the legacy vanilla JS frontend at root
+app.use(express.static(path.join(ROOT, "public")));
+
+// API endpoint for legacy frontend
+app.get("/api/design-system", (_req, res) => {
+  res.json(data);
+});
 
 const startServer = (port: number | string) => {
   const server = app.listen(port, () => {

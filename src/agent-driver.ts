@@ -14,29 +14,35 @@ export class AgentDriver {
     this.sessionName = sessionName;
   }
 
-  private async run(command: string): Promise<string> {
+  private async run(command: string, timeout: number = 120_000): Promise<string> {
     const fullCommand = `agent-browser --session ${this.sessionName} ${command}`;
     try {
-      const { stdout } = await execAsync(fullCommand, { maxBuffer: 1024 * 1024 * 50 }); // 50MB buffer
+      const { stdout } = await execAsync(fullCommand, {
+        maxBuffer: 1024 * 1024 * 50,
+        timeout,
+      });
       return stdout;
     } catch (error: any) {
       if (error.stdout) {
         return error.stdout;
+      }
+      if (error.killed || error.signal === "SIGTERM") {
+        throw new Error(`agent-browser command timed out after ${timeout}ms: ${command}`);
       }
       throw error;
     }
   }
 
   async open(url: string): Promise<void> {
-    await this.run(`open "${url}"`);
+    await this.run(`open "${url}"`, 180_000);
   }
 
   async waitLoad(type: string = "networkidle"): Promise<void> {
-    await this.run(`wait --load ${type}`);
+    await this.run(`wait --load ${type}`, 180_000);
   }
 
   async wait(ms: number): Promise<void> {
-    await this.run(`wait ${ms}`);
+    await this.run(`wait ${ms}`, Math.max(120_000, ms + 30_000));
   }
 
   async snapshot(): Promise<any> {
@@ -75,7 +81,7 @@ export class AgentDriver {
   }
 
   async screenshot(path: string): Promise<void> {
-    await this.run(`screenshot "${path}"`);
+    await this.run(`screenshot "${path}"`, 180_000);
   }
 
   async click(ref: string): Promise<void> {
@@ -88,10 +94,10 @@ export class AgentDriver {
 
   async evalStdin(js: string): Promise<string> {
     const b64 = Buffer.from(js).toString("base64");
-    return await this.run(`eval -b "${b64}"`);
+    return await this.run(`eval -b "${b64}"`, 180_000);
   }
 
   async close(): Promise<void> {
-    await this.run(`close`);
+    await this.run(`close`, 60_000);
   }
 }

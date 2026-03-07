@@ -9,9 +9,11 @@
     "web": "concurrently \"bun run src/serve.ts\" \"cd web && bun run dev\""
   },
   "dependencies": {
+    "@google/genai": "^1.44.0",
     "dotenv": "^17.3.1",
     "express": "^4.21.0",
-    "playwright": "^1.48.0"
+    "playwright": "^1.48.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
