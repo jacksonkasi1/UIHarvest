@@ -23,20 +23,25 @@ if (!fs.existsSync(dataPath)) {
   process.exit(1);
 }
 
-const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-
 const app = express();
-const PORT = 3333;
+const PORT = process.env.PORT || 3333;
 
-app.use("/output", express.static(OUTPUT));
-app.use(express.static(path.join(ROOT, "public"))); // Serve the HTML UI instead of web/dist
+const startServer = (port: number | string) => {
+  const server = app.listen(port, () => {
+    const url = `http://localhost:${port}`;
+    console.log(`\n🎨  Design Explorer serving saved data → ${url}\n`);
+    openBrowser(url);
+  });
 
-app.get("/api/design-system", (_req, res) => {
-  res.json(data);
-});
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`⚠️  Port ${port} is in use, trying ${Number(port) + 1}...`);
+      startServer(Number(port) + 1);
+    } else {
+      console.error("❌ Failed to start server:", err);
+      process.exit(1);
+    }
+  });
+};
 
-app.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`;
-  console.log(`\n🎨  Design Explorer serving saved data → ${url}\n`);
-  openBrowser(url);
-});
+startServer(PORT);

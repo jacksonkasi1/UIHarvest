@@ -1,8 +1,16 @@
 import "dotenv/config";
-import { chromium, Page, BrowserContext } from "playwright";
+
+// ** import core packages
+import { chromium, Page } from "playwright";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
+
+// ** import utils
 import path from "path";
 import fs from "fs";
 import os from "os";
+
+// ** import apis
 import { extractDesignSystem } from "./extractor.js";
 import { DesignAnalyzer } from "./analyzer.js";
 import { startServer } from "./server.js";
@@ -17,6 +25,33 @@ function ensureDirs() {
   [OUTPUT, SHOTS, ASSETS, FONTS].forEach((d) => fs.mkdirSync(d, { recursive: true }));
 }
 
+function removeOutputDir() {
+  if (fs.existsSync(OUTPUT)) {
+    fs.rmSync(OUTPUT, { recursive: true, force: true });
+  }
+}
+
+async function shouldCleanOutput(force: boolean): Promise<boolean> {
+  if (force) return true;
+  if (!fs.existsSync(OUTPUT)) return false;
+
+  const files = fs.readdirSync(OUTPUT);
+  if (files.length === 0) return false;
+
+  if (!process.stdin.isTTY) {
+    console.log("ℹ️   Existing output detected. Keeping existing files (non-interactive mode).");
+    return false;
+  }
+
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question("🧹  Existing output found. Clean output folder before run? (y/N): ");
+    return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
 async function runInParallel<T>(items: T[], concurrency: number, fn: (item: T, workerId: number) => Promise<void>) {
   let index = 0;
   const workers = new Array(concurrency).fill(0).map(async (_, workerId) => {
@@ -28,12 +63,40 @@ async function runInParallel<T>(items: T[], concurrency: number, fn: (item: T, w
   await Promise.all(workers);
 }
 
+async function dismissOverlays(page: Page) {
+  for (const sel of [
+    'button[aria-label*="close" i]',
+    '[role="dialog"] button[aria-label*="close" i]',
+    'button:has-text("Close")',
+    'button:has-text("Dismiss")',
+    '.hds-dialog button',
+  ]) {
+    try {
+      const btn = page.locator(sel).first();
+      if (await btn.isVisible({ timeout: 150 })) {
+        await btn.click({ timeout: 300 });
+      }
+    } catch {}
+  }
+  try {
+    await page.keyboard.press("Escape");
+  } catch {}
+}
+
 async function main() {
-  const url = process.argv[2];
+  const args = process.argv.slice(2);
+  const forceClean = args.includes("-f") || args.includes("--force");
+  const noServe = args.includes("--no-serve");
+  const url = args.find((arg) => !arg.startsWith("-"));
   if (!url) {
     console.error("\n  Usage:  npm start <url>\n");
-    console.error("  Example:  npm start https://asana.com/features/project-management\n");
+    console.error("  Example:  npm start https://asana.com/features/project-management -- --force\n");
     process.exit(1);
+  }
+
+  if (await shouldCleanOutput(forceClean)) {
+    removeOutputDir();
+    console.log("🧹  Cleaned existing output folder.");
   }
 
   ensureDirs();
@@ -144,18 +207,7 @@ async function main() {
   console.log("⏳  Waiting an extra 5 seconds for final layout settling…");
   await page.waitForTimeout(6000);
 
-  // Fix sticky/fixed elements before screenshots
-  console.log("🛠️   Adjusting fixed elements for full-page screenshot…");
-  await page.evaluate(() => {
-    const elements = document.querySelectorAll("*");
-    for (let i = 0; i < elements.length; i++) {
-      const el = elements[i] as HTMLElement;
-      const style = window.getComputedStyle(el);
-      if (style.position === "fixed" || style.position === "sticky") {
-        el.style.setProperty("position", "absolute", "important");
-      }
-    }
-  });
+  console.log("🛠️   Keeping original layout (no forced fixed/sticky rewrite)…");
 
   // Dismiss cookie banners
   for (const sel of [
@@ -169,6 +221,10 @@ async function main() {
     } catch {}
   }
   await page.waitForTimeout(1000);
+
+  // Dismiss modal/dialog overlays BEFORE extraction so component IDs stay consistent
+  await dismissOverlays(page);
+  await page.waitForTimeout(150);
 
   // Extract
   console.log("🔬  Extracting design system…");
@@ -205,6 +261,31 @@ async function main() {
   console.log(`    Font Faces:  ${rawData.fontFaces.length}`);
   console.log(`    Containers:  ${rawData.layoutSystem.containerWidths.join(", ")}px`);
 
+  // Stabilize layout for screenshots only (after extraction is finished)
+  console.log("🧩  Stabilizing layout for screenshot capture…");
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    style.setAttribute("data-extract-screenshot-style", "1");
+    style.textContent = `
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const elements = document.querySelectorAll("*");
+    elements.forEach((el) => {
+      const node = el as HTMLElement;
+      const cs = window.getComputedStyle(node);
+      if (cs.position === "fixed" || cs.position === "sticky") {
+        node.style.setProperty("position", "absolute", "important");
+      }
+    });
+  });
+  await page.waitForTimeout(200);
+
   // Full page screenshot
   console.log("\n📸  Full page screenshot…");
   try {
@@ -222,10 +303,36 @@ async function main() {
     process.stdout.write(`\r    ↳ Capturing section ${secCount}/${rawData.sections.length}`);
     try {
       const loc = page.locator(`[data-extract-id="${sec.id}"]`).first();
-      if (await loc.isVisible({ timeout: 100 })) {
+      await loc.evaluate((el: HTMLElement) => {
+        el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+      }).catch(() => {});
+      await page.waitForTimeout(100);
+      if (await loc.count() > 0) {
         const fname = `${sec.id}.png`;
-        await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
-        (sec as any).screenshot = `screenshots/${fname}`;
+        try {
+          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 30000, animations: "disabled" });
+        } catch {
+          const box = await loc.boundingBox();
+          if (box && box.width > 10 && box.height > 10) {
+            const maxH = Math.min(box.height, 2200);
+            await page.screenshot({
+              path: path.join(SHOTS, fname),
+              type: "png",
+              animations: "disabled",
+              clip: {
+                x: Math.max(0, box.x),
+                y: Math.max(0, box.y),
+                width: Math.max(10, box.width),
+                height: Math.max(10, maxH),
+              },
+              timeout: 30000,
+            });
+          }
+        }
+        const outPath = path.join(SHOTS, fname);
+        if (fs.existsSync(outPath)) {
+          (sec as any).screenshot = `screenshots/${fname}`;
+        }
       }
     } catch {}
   }
@@ -237,15 +344,21 @@ async function main() {
   const pages: Page[] = [page];
   
   // Component screenshots
-  const seenSig = new Set<string>();
-  const compsToProcess = [];
-  for (const comp of rawData.components) {
-    const sigKey = `${comp.type}|${comp.subType}|${comp.signature}`;
-    if (!seenSig.has(sigKey) && compsToProcess.length < 200) {
-      seenSig.add(sigKey);
-      compsToProcess.push(comp);
-    }
-  }
+  const typePriority = (type: string) => {
+    if (type === "card") return 1;
+    if (type === "button") return 2;
+    if (type === "media") return 3;
+    if (type === "link-arrow") return 4;
+    if (type === "navigation") return 5;
+    return 10;
+  };
+
+  const compsToProcess = [...rawData.components]
+    .sort((a: any, b: any) => {
+      const p = typePriority(a.type) - typePriority(b.type);
+      if (p !== 0) return p;
+      return (b.confidence || 0) - (a.confidence || 0);
+    });
 
   let shotCount = 0;
   let compAttempted = 0;
@@ -255,20 +368,44 @@ async function main() {
   await runInParallel(compsToProcess, 1, async (comp, workerId) => {
     const p = page;
     compAttempted++;
-    process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
     try {
+      const rect = comp.rect || { width: 0, height: 0 };
+      const aspect = (rect.width || 0) / Math.max(1, rect.height || 1);
+      if (comp.type === "component") {
+        if (rect.height < 28 || aspect > 14 || (rect.width < 40 && rect.height < 40)) {
+          return;
+        }
+      }
+
       const loc = p.locator(`[data-extract-id="${comp.id}"]`).first();
-      if (await loc.isVisible({ timeout: 100 })) {
-        const box = await loc.boundingBox();
+      const count = await loc.count();
+      if (count === 0) {
+        // Element lost due to re-render
+        return;
+      }
+      
+      // Scroll into view to ensure lazy-loaded or obscured elements can be captured
+      await loc.evaluate((el: HTMLElement) => {
+        el.scrollIntoView({ block: "center", inline: "center", behavior: "auto" });
+      }).catch(() => {});
+      await loc.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+      await p.waitForTimeout(120);
+
+      if (await loc.isVisible({ timeout: 500 })) {
+        const boxA = await loc.boundingBox();
+        await p.waitForTimeout(80);
+        const boxB = await loc.boundingBox();
+        const box = boxB || boxA;
         if (box && box.width > 5 && box.height > 5) {
           const fname = `${comp.id}.png`;
           await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
-          (comp as any).screenshot = `screenshots/${fname}`;
+          const shotPath = `screenshots/${fname}`;
+          (comp as any).screenshot = shotPath;
           shotCount++;
-          process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
         }
       }
-    } catch {}
+    } catch (err) {}
+    process.stdout.write(`\r    ↳ Attempting component ${compAttempted}/${compsToProcess.length} (Captured: ${shotCount})`);
   });
   console.log(""); // Newline after progress
 
@@ -378,7 +515,11 @@ async function main() {
   console.log(`\n✅  Saved → ${jsonPath}`);
 
   // ── Start Server ──
-  startServer(finalData, OUTPUT, ROOT);
+  if (!noServe) {
+    startServer(finalData, OUTPUT, ROOT);
+  } else {
+    console.log("ℹ️   Skipping local server start (--no-serve).");
+  }
 }
 
 main().catch((err) => {

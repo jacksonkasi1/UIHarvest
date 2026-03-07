@@ -27,6 +27,8 @@ export function ComponentsView({
     groups[c.signature].push(c)
   })
   const variants = Object.values(groups).map(g => ({ ...g[0], count: g.length }))
+  const visibleVariants = variants.filter(v => !!v.screenshot)
+  const hiddenNoShot = variants.length - visibleVariants.length
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -52,15 +54,15 @@ export function ComponentsView({
         </div>
       )}
 
+      {hiddenNoShot > 0 && (
+        <div className="text-xs text-muted-foreground">{hiddenNoShot} variants hidden (no screenshot)</div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {variants.map((c, i) => (
+        {visibleVariants.map((c, i) => (
           <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-indigo-500/50 transition-colors group flex flex-col" onClick={() => setSelectedComp(c)}>
             <div className="bg-muted/50 flex items-center justify-center p-6 min-h-[120px] max-h-[240px] border-b border-border relative">
-              {c.screenshot ? (
-                <img src={`/output/${c.screenshot}`} alt={c.name} className="max-w-full max-h-[200px] object-contain drop-shadow-md" loading="lazy" />
-              ) : (
-                <span className="text-xs text-muted-foreground font-mono">No screenshot</span>
-              )}
+              <img src={`/output/${c.screenshot}`} alt={c.name} className="max-w-full max-h-[200px] object-contain drop-shadow-md" loading="lazy" />
             </div>
             <div className="p-4 flex flex-col flex-1">
               <div className="flex items-start gap-2 mb-2 flex-wrap">

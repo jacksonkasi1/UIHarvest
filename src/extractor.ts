@@ -590,14 +590,18 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       // Is a flex/grid wrapper with no visual properties
       const isFlexGrid = s.display === "flex" || s.display === "grid" || s.display === "inline-flex" || s.display === "inline-grid";
 
-      // Single child wrapper → likely layout container
+      // If it has NO background, NO border, NO shadow, and NO direct text, it is likely a layout container.
+      // But we shouldn't discard elements that are semantic or have complex structures.
       const visibleChildren = Array.from(el.children).filter((c) => vis(c as HTMLElement));
-      if (visibleChildren.length === 1 && !ownBg && !hasBorder && !hasShadow && !hasRadius) {
+      
+      // Single child wrapper → definitely layout container
+      if (visibleChildren.length === 1 && !hasRadius) {
         return true;
       }
 
-      // Flex/grid with no styling, many children, no text → layout container
-      if (isFlexGrid && !ownBg && !hasBorder && !hasPadding && visibleChildren.length > 6) {
+      // Flex/grid with no styling and no direct text
+      const hasDirectText = getDirectText(el).length > 0;
+      if (isFlexGrid && !hasDirectText && !hasPadding) {
         return true;
       }
 
@@ -780,25 +784,56 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
         score -= 20;
       }
 
+      const s = getComputedStyle(cluster.elements[0]);
+      const rootEl = cluster.elements[0];
+      const rootTag = rootEl.tagName.toLowerCase();
+      const hasBg = rgbToHex(s.backgroundColor) !== null;
+      const parentBg = rootEl.parentElement ? rgbToHex(getComputedStyle(rootEl.parentElement).backgroundColor) : null;
+      const ownBg = hasBg && rgbToHex(s.backgroundColor) !== parentBg;
+      const hasBorder = s.borderStyle !== "none" && pf(s.borderWidth) > 0;
+      const hasShadow = s.boxShadow !== "none" && s.boxShadow !== "";
+      const hasRadius = pf(s.borderRadius) > 0;
+      const hasSurface = ownBg || hasBorder || hasShadow || hasRadius;
+      const directChildren = Array.from(rootEl.children).filter((c) => vis(c as HTMLElement));
+      const directActionChildren = directChildren.filter((c) => {
+        const cTag = (c as HTMLElement).tagName.toLowerCase();
+        const cRole = (c as HTMLElement).getAttribute("role");
+        return cTag === "button" || cTag === "a" || cRole === "button";
+      }).length;
+      const directHeadingChildren = directChildren.filter((c) => !!(c as HTMLElement).querySelector("h1,h2,h3,h4,h5,h6")).length;
+      const descendantActions = rootEl.querySelectorAll("button, a[href], [role='button']").length;
+      const isAtomicActionRoot = rootTag === "button" || rootTag === "a" || rootEl.getAttribute("role") === "button";
+      const isLikelyGroupContainer = directChildren.length >= 2 && (directActionChildren >= 2 || directHeadingChildren >= 2 || descendantActions >= 3);
+
+      if (hasTitle && hasText && !hasSurface) {
+        score -= 20;
+      }
+      if (isLikelyGroupContainer) {
+        score -= 15;
+      }
       cluster.score = score;
 
       // Classify component type based on semantic slots
-      if (hasIcon && hasTitle && hasText && hasAction) {
+      if (hasIcon && hasTitle && hasText && hasAction && hasSurface) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "feature-card";
-      } else if (hasMedia && hasTitle && hasText) {
+      } else if (hasMedia && hasTitle && hasText && hasSurface) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "content-card";
-      } else if (hasIcon && hasTitle) {
+      } else if (hasIcon && hasTitle && hasSurface) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "icon-card";
-      } else if (hasTitle && hasText) {
+      } else if (hasTitle && hasText && hasSurface && !isLikelyGroupContainer) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "text-card";
-      } else if (hasTitle && hasAction) {
+      } else if (hasTitle && hasText) {
+        // Just text elements grouped together with no card-like styling
+        cluster.resolvedType = "typography";
+        cluster.resolvedSubType = "text-group";
+      } else if (hasTitle && hasAction && hasSurface && !isLikelyGroupContainer) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "action-card";
-      } else if (hasAction && !hasTitle && !hasText) {
+      } else if (hasAction && !hasTitle && !hasText && isAtomicActionRoot && !isLikelyGroupContainer) {
         cluster.resolvedType = "button";
         cluster.resolvedSubType = "repeated-button";
       } else if (hasMedia && !hasTitle) {
@@ -967,6 +1002,10 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
     resolvedClusters.forEach((cluster) => {
       if (cluster.score < 10) return;
 
+      // Drop low-value noisy cluster types that produce random strips
+      if (cluster.resolvedType === "typography") return;
+      if (cluster.resolvedType === "component" && cluster.score < 40) return;
+
       const patternId = `pattern-${patIdx++}`;
       const compIds: string[] = [];
 
@@ -986,6 +1025,14 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       }
 
       cluster.elements.forEach((el, idx) => {
+        const rect = el.getBoundingClientRect();
+        const aspect = rect.width / Math.max(1, rect.height);
+
+        // Guardrail: skip ultra-thin strips / oversized wrappers
+        if (rect.height < 36 || aspect > 16 || rect.height > vh * 1.5) {
+          return;
+        }
+
         const heading = el.querySelector("h1,h2,h3,h4,h5,h6");
         const s = getComputedStyle(el);
 
@@ -1018,6 +1065,8 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
         compIds.push(compId);
       });
 
+      if (compIds.length < 1) return;
+
       patterns.push({
         id: patternId,
         name: patternName || `${cluster.resolvedType} pattern`,
@@ -1035,6 +1084,64 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
     // ═══════════════════════════════════════════
     // PHASE 7: DETECT STANDALONE COMPONENTS
     // ═══════════════════════════════════════════
+
+    // Visually Distinct Containers (Cards, Modals, Panels that might only appear once)
+    document.querySelectorAll("div, section, article, aside, dialog, form").forEach((node) => {
+      const el = node as HTMLElement;
+      if (!vis(el) || elementToCompId.has(el)) return;
+      
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      
+      // Skip if too large or too small
+      if (r.width < 100 || r.height < 50 || r.width > vw * 0.95 || r.height > fullH * 0.8) return;
+      
+      const hasBgImage = s.backgroundImage && s.backgroundImage !== "none" && s.backgroundImage !== "";
+      const bg = rgbToHex(s.backgroundColor);
+      const parentBg = el.parentElement ? rgbToHex(getComputedStyle(el.parentElement).backgroundColor) : null;
+      const ownBg = (bg && bg !== parentBg && bg !== "transparent") || hasBgImage;
+      
+      const hasBorder = s.borderStyle !== "none" && pf(s.borderWidth) > 0;
+      const hasShadow = s.boxShadow !== "none" && s.boxShadow !== "";
+      const hasRadius = pf(s.borderRadius) > 0;
+      const hasPadding = pf(s.paddingTop) > 0 || pf(s.paddingLeft) > 0;
+      
+      // Must be visually distinct (has background, border, or shadow) AND have some structure (padding/radius)
+      const isDistinct = (ownBg || hasBorder || hasShadow) && (hasPadding || hasRadius);
+      
+      if (isDistinct) {
+        // Only accept if it actually contains meaningful content (not just a decorative box)
+        const text = getDirectText(el) || el.textContent?.trim();
+        const hasGraphics = el.querySelector("img, svg, video, picture");
+        if (text || hasGraphics) {
+          // Check if it's already fully contained inside another identified component
+          let isContained = false;
+          let current = el.parentElement;
+          while (current && current !== document.body) {
+            if (elementToCompId.has(current)) {
+              isContained = true;
+              break;
+            }
+            current = current.parentElement;
+          }
+          
+          if (!isContained) {
+            const slots = getSemanticSlots(el);
+            let type = "card";
+            let subType = "custom-panel";
+            
+            if (slots.some(s => s.role === "input" || s.role === "form")) subType = "form-panel";
+            else if (s.position === "fixed" || s.position === "absolute" || el.tagName.toLowerCase() === "dialog") type = "modal";
+            
+            addComponent(el, type, subType, el.getAttribute("aria-label") || el.querySelector("h1,h2,h3,h4")?.textContent?.trim() || "Surface / Panel", {
+              backgroundColor: s.backgroundColor, borderRadius: s.borderRadius,
+              boxShadow: s.boxShadow, border: s.border, padding: s.padding,
+              display: s.display, width: `${Math.round(r.width)}px`, height: `${Math.round(r.height)}px`
+            }, slots, 65, 15000);
+          }
+        }
+      }
+    });
 
     // Navigation
     document.querySelectorAll("header, nav, [role='navigation'], [role='banner']").forEach((node) => {
@@ -1064,9 +1171,23 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
     document.querySelectorAll("button, [role='button'], [type='submit']").forEach((node) => {
       const el = node as HTMLElement;
       if (!vis(el) || elementToCompId.has(el)) return;
+      const tag = el.tagName.toLowerCase();
       const s = getComputedStyle(el);
       const r = el.getBoundingClientRect();
       if (r.width < 20 || r.height < 15) return;
+
+      // Skip wrapper nodes pretending to be button groups
+      if (tag !== "button" && tag !== "input") {
+        const nestedActions = el.querySelectorAll("button, a[href], [role='button']").length;
+        if (nestedActions > 0) return;
+      }
+
+      // Skip very wide, thin row controls that are usually list wrappers
+      if (r.width > 520 && r.height < 42) return;
+
+      const text = (el.textContent || "").trim();
+      if (text.length > 120 && r.height < 40) return;
+
       addComponent(el, "button", "native", el.textContent?.trim() || "Button", {
         backgroundColor: s.backgroundColor, color: s.color, borderRadius: s.borderRadius,
         padding: s.padding, fontSize: s.fontSize, fontWeight: s.fontWeight,
@@ -1165,11 +1286,28 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
 
     const sections: any[] = [];
 
+    function overlapRatio(a: Rect, b: Rect): number {
+      const x1 = Math.max(a.x, b.x);
+      const y1 = Math.max(a.y, b.y);
+      const x2 = Math.min(a.x + a.width, b.x + b.width);
+      const y2 = Math.min(a.y + a.height, b.y + b.height);
+      const iw = Math.max(0, x2 - x1);
+      const ih = Math.max(0, y2 - y1);
+      const inter = iw * ih;
+      const minArea = Math.max(1, Math.min(a.width * a.height, b.width * b.height));
+      return inter / minArea;
+    }
+
     function tryAddSection(el: HTMLElement, idx: number) {
       if (!vis(el)) return;
       const r = el.getBoundingClientRect();
       const tag = el.tagName.toLowerCase();
-      if (SKIP_TAGS.has(tag) || r.width < vw * 0.6 || r.height < 30) return;
+      const s = getComputedStyle(el);
+      if (SKIP_TAGS.has(tag) || r.width < vw * 0.6 || r.height < 120) return;
+
+      // Skip modal/dialog/overlay-like containers
+      if (el.closest("dialog, [role='dialog'], [aria-modal='true'], .hds-dialog, .hds-modal")) return;
+      if ((s.position === "fixed" || s.position === "absolute") && pf(s.zIndex || "0") >= 20) return;
 
       let name =
         tag === "header" || el.querySelector("nav") ? "Header / Navigation"
@@ -1194,14 +1332,14 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       sections.push({
         id, name, tag, rect: absRect(el),
         textPreview: clip(el.textContent?.trim() || "", 400),
-        styles: { backgroundColor: getComputedStyle(el).backgroundColor, padding: getComputedStyle(el).padding },
+        styles: { backgroundColor: s.backgroundColor, padding: s.padding },
         dataAttributes: getDataAttrs(el),
         childComponentIds: childCompIds,
       });
     }
 
     const semantics = document.querySelectorAll(
-      "header, nav, main > section, main > div, main > article, section, footer, [role='banner'], [role='contentinfo']"
+      "header, nav, main > section, main > div, main > article, main > aside, footer, [role='banner'], [role='contentinfo']"
     );
     if (semantics.length >= 3) {
       semantics.forEach((el, i) => tryAddSection(el as HTMLElement, i));
@@ -1214,6 +1352,25 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
         : kids;
       targets.forEach((el, i) => tryAddSection(el, i));
     }
+
+    // Dedupe heavily-overlapping sections to avoid split/random crops
+    const dedupedSections: any[] = [];
+    sections
+      .sort((a, b) => a.rect.y - b.rect.y)
+      .forEach((sec) => {
+        const isDuplicate = dedupedSections.some((existing) => {
+          const overlap = overlapRatio(sec.rect, existing.rect);
+          const contained =
+            sec.rect.y >= existing.rect.y - 4 &&
+            sec.rect.y + sec.rect.height <= existing.rect.y + existing.rect.height + 4 &&
+            sec.rect.x >= existing.rect.x - 8 &&
+            sec.rect.x + sec.rect.width <= existing.rect.x + existing.rect.width + 8;
+          const tooCloseTop = Math.abs(sec.rect.y - existing.rect.y) < 80;
+          return overlap > 0.85 || (contained && tooCloseTop);
+        });
+
+        if (!isDuplicate) dedupedSections.push(sec);
+      });
 
     // ═══════════════════════════════════════════
     // PHASE 10: DEDUP ASSETS
@@ -1270,7 +1427,7 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       },
       components: components.slice(0, 500),
       patterns: patterns.slice(0, 50),
-      sections,
+      sections: dedupedSections,
       assets: {
         images: uniqueImages.slice(0, 120),
         svgs: uniqueSvgs.slice(0, 100),
