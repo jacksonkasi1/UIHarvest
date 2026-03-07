@@ -12,7 +12,13 @@ import { SectionDialog } from "@/components/dialogs/SectionDialog"
 import { SvgDialog } from "@/components/dialogs/SvgDialog"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 
-// ** import apis
+// ** import lib
+import { OutputBaseProvider } from "@/lib/output-base"
+
+// ** import views
+import { PasswordView } from "@/views/PasswordView"
+import { LandingView } from "@/views/LandingView"
+import { ProgressView } from "@/views/ProgressView"
 import {
   OverviewView,
   TreeView,
@@ -38,12 +44,21 @@ import {
   MemoryView,
 } from "./views"
 
+// ════════════════════════════════════════════════════
+// APP MODES
+// ════════════════════════════════════════════════════
+
+type AppMode = "checking" | "password" | "landing" | "progress" | "explorer"
+
 export default function App() {
+  const [mode, setMode] = useState<AppMode>("checking")
+
+  // Explorer state
   const [data, setData] = useState<DesignSystemData | null>(null)
   const [memoryGroups, setMemoryGroups] = useState<MemoryDocumentGroup[]>([])
   const [memoryContent, setMemoryContent] = useState("")
   const [memoryLoading, setMemoryLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, _setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [activeTab, setActiveTab] = useState("overview")
@@ -54,6 +69,12 @@ export default function App() {
 
   const [theme, setTheme] = useState<"light" | "dark">("dark")
 
+  // Job tracking
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+
+  // Active job API base (for explorer mode after extraction)
+  const [jobApiBase, setJobApiBase] = useState<string | null>(null)
+
   useEffect(() => {
     const root = window.document.documentElement
     root.classList.remove("light", "dark")
@@ -62,41 +83,100 @@ export default function App() {
 
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"))
 
+  // ── Initial auth check ──────────────────────────────────────────────
   useEffect(() => {
-    Promise.all([
-      fetch("/api/design-system").then((res) => {
-        if (!res.ok) throw new Error("Could not load design system data. Did you run the extractor?")
-        return res.json()
-      }),
-      fetch("/api/memory")
-        .then((res) => (res.ok ? res.json() : { available: false, groups: [] }))
-        .catch(() => ({ available: false, groups: [] })),
-    ])
-      .then(([json, memory]) => {
-        setData(json)
-        setMemoryGroups(memory.groups ?? [])
-        setLoading(false)
+    fetch("/api/auth/status")
+      .then((res) => res.json())
+      .then((status) => {
+        if (status.requiresPassword && !status.authenticated) {
+          setMode("password")
+        } else {
+          initializeApp()
+        }
       })
-      .catch((err) => {
-        setError(err.message)
-        setLoading(false)
+      .catch(() => {
+        // Server unreachable — try legacy mode (CLI-started server)
+        initializeApp()
       })
   }, [])
 
+  const initializeApp = () => {
+    // Check localStorage for an active job
+    const savedJobId = localStorage.getItem("uih_jobId")
+    if (savedJobId) {
+      // Verify job is still alive
+      fetch(`/api/extract/${savedJobId}/status`)
+        .then((res) => {
+          if (res.ok) return res.json()
+          throw new Error("Job not found")
+        })
+        .then((jobStatus) => {
+          if (jobStatus.status === "running" || jobStatus.status === "queued") {
+            setActiveJobId(savedJobId)
+            setMode("progress")
+          } else if (jobStatus.status === "done") {
+            // Job finished while tab was closed — go to progress to show download
+            setActiveJobId(savedJobId)
+            setMode("progress")
+          } else {
+            localStorage.removeItem("uih_jobId")
+            tryLoadLegacyExplorer()
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem("uih_jobId")
+          tryLoadLegacyExplorer()
+        })
+    } else {
+      tryLoadLegacyExplorer()
+    }
+  }
+
+  const tryLoadLegacyExplorer = () => {
+    // Try to load legacy /api/design-system (CLI mode)
+    fetch("/api/design-system")
+      .then((res) => {
+        if (!res.ok) throw new Error("No data")
+        return res.json()
+      })
+      .then((json) => {
+        setData(json)
+        setLoading(false)
+        setMode("explorer")
+        // Also load memory
+        fetch("/api/memory")
+          .then((res) => (res.ok ? res.json() : { groups: [] }))
+          .then((memory) => setMemoryGroups(memory.groups ?? []))
+          .catch(() => { })
+      })
+      .catch(() => {
+        // No legacy data — show landing page
+        setLoading(false)
+        setMode("landing")
+      })
+  }
+
+  // ── Memory content loading (explorer mode) ──────────────────────────
   useEffect(() => {
+    if (mode !== "explorer") return
     if (!activeTab.startsWith("memory:")) {
       setMemoryContent("")
       setMemoryLoading(false)
       return
     }
 
-    const path = activeTab.replace(/^memory:/, "")
-    if (!path) return
+    const docPath = activeTab.replace(/^memory:/, "")
+    if (!docPath) return
 
     setMemoryLoading(true)
-    fetch(`/api/memory/content?path=${encodeURIComponent(path)}`)
+
+    const apiPath = jobApiBase
+      ? `${jobApiBase}/memory/content?path=${encodeURIComponent(docPath)}`
+      : `/api/memory/content?path=${encodeURIComponent(docPath)}`
+
+    fetch(apiPath)
       .then((res) => {
-        if (!res.ok) throw new Error("Could not load design memory markdown.")
+        if (!res.ok) throw new Error("Not found")
         return res.json()
       })
       .then((json) => {
@@ -107,15 +187,98 @@ export default function App() {
         setMemoryContent("")
         setMemoryLoading(false)
       })
-  }, [activeTab])
+  }, [activeTab, mode, jobApiBase])
 
-  const activeMemoryPath = activeTab.startsWith("memory:") ? activeTab.replace(/^memory:/, "") : null
+  const activeMemoryPath = activeTab.startsWith("memory:")
+    ? activeTab.replace(/^memory:/, "")
+    : null
 
   const activeMemoryDoc = useMemo(
-    () => memoryGroups.flatMap((group) => group.items).find((item) => item.path === activeMemoryPath) ?? null,
+    () =>
+      memoryGroups
+        .flatMap((group) => group.items)
+        .find((item) => item.path === activeMemoryPath) ?? null,
     [memoryGroups, activeMemoryPath]
   )
 
+  // ── Handlers ────────────────────────────────────────────────────────
+
+  const handleAuthenticated = () => {
+    initializeApp()
+  }
+
+  const handleJobStarted = (jobId: string) => {
+    setActiveJobId(jobId)
+    setMode("progress")
+  }
+
+  const handleResumeJob = (jobId: string) => {
+    setActiveJobId(jobId)
+    setMode("progress")
+  }
+
+  const handleViewExplorer = (resultData: any) => {
+    setData(resultData)
+    setLoading(false)
+    setMode("explorer")
+
+    // Load memory from job endpoint
+    if (activeJobId) {
+      setJobApiBase(`/api/extract/${activeJobId}`)
+      fetch(`/api/extract/${activeJobId}/memory`)
+        .then((res) => (res.ok ? res.json() : { groups: [] }))
+        .then((memory) => setMemoryGroups(memory.groups ?? []))
+        .catch(() => { })
+    }
+  }
+
+  const handleBackToLanding = () => {
+    setActiveJobId(null)
+    setJobApiBase(null)
+    setMode("landing")
+  }
+
+  // ════════════════════════════════════════════════════
+  // RENDER
+  // ════════════════════════════════════════════════════
+
+  // Checking auth status
+  if (mode === "checking") {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center bg-background text-muted-foreground">
+        <Activity className="h-6 w-6 animate-pulse text-primary" />
+      </div>
+    )
+  }
+
+  // Password gate
+  if (mode === "password") {
+    return <PasswordView onAuthenticated={handleAuthenticated} />
+  }
+
+  // Landing page
+  if (mode === "landing") {
+    return (
+      <LandingView
+        onJobStarted={handleJobStarted}
+        existingJobId={localStorage.getItem("uih_jobId")}
+        onResumeJob={handleResumeJob}
+      />
+    )
+  }
+
+  // Progress view
+  if (mode === "progress" && activeJobId) {
+    return (
+      <ProgressView
+        jobId={activeJobId}
+        onViewExplorer={handleViewExplorer}
+        onBack={handleBackToLanding}
+      />
+    )
+  }
+
+  // Explorer mode — loading
   if (loading) {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-background text-muted-foreground">
@@ -127,6 +290,7 @@ export default function App() {
     )
   }
 
+  // Explorer mode — error
   if (error || !data) {
     return (
       <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 bg-background p-8 text-center text-muted-foreground">
@@ -140,73 +304,80 @@ export default function App() {
     )
   }
 
+  // Explorer mode — full app
   const uniqueVariants = new Set(data.components.map((c) => c.signature)).size
+  const outputBase = activeJobId
+    ? `/api/extract/${activeJobId}/output`
+    : "/output"
 
   return (
-    <SidebarProvider>
-      <div className="flex h-dvh overflow-hidden bg-background text-foreground font-sans selection:bg-primary/30 w-full">
-        <Sidebar
-          data={data}
-          memoryGroups={memoryGroups}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          setActiveSubFilter={setActiveSubFilter}
-          theme={theme}
-          toggleTheme={toggleTheme}
-        />
+    <OutputBaseProvider value={outputBase}>
+      <SidebarProvider>
+        <div className="flex h-dvh overflow-hidden bg-background text-foreground font-sans selection:bg-primary/30 w-full">
+          <Sidebar
+            data={data}
+            memoryGroups={memoryGroups}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            setActiveSubFilter={setActiveSubFilter}
+            theme={theme}
+            toggleTheme={toggleTheme}
+            downloadUrl={activeJobId ? `/api/extract/${activeJobId}/download` : null}
+          />
 
-        <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12 relative w-full flex flex-col">
-          <SidebarTrigger className="absolute top-4 left-4" />
-          <div className="mx-auto max-w-6xl w-full space-y-8 mt-6 lg:mt-0">
-          {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
-          {activeTab === "tree" && <TreeView data={data} setSelectedComp={setSelectedComp} />}
-          {activeTab === "colors" && <ColorsView data={data} />}
-          {activeTab === "gradients" && <GradientsView data={data} />}
-          {activeTab === "typography" && <TypographyView data={data} />}
-          {activeTab === "spacing" && <SpacingView data={data} />}
-          {activeTab === "radii" && <RadiiView data={data} />}
-          {activeTab === "shadows" && <ShadowsView data={data} />}
-          {activeTab === "borders" && <BordersView data={data} />}
-          {activeTab === "transitions" && <TransitionsView data={data} />}
-          {activeTab === "css-vars" && <CssVarsView data={data} />}
-          {activeTab === "fonts" && <FontFilesView data={data} />}
+          <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12 relative w-full flex flex-col">
+            <SidebarTrigger className="absolute top-4 left-4" />
+            <div className="mx-auto max-w-6xl w-full space-y-8 mt-6 lg:mt-0">
+              {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
+              {activeTab === "tree" && <TreeView data={data} setSelectedComp={setSelectedComp} />}
+              {activeTab === "colors" && <ColorsView data={data} />}
+              {activeTab === "gradients" && <GradientsView data={data} />}
+              {activeTab === "typography" && <TypographyView data={data} />}
+              {activeTab === "spacing" && <SpacingView data={data} />}
+              {activeTab === "radii" && <RadiiView data={data} />}
+              {activeTab === "shadows" && <ShadowsView data={data} />}
+              {activeTab === "borders" && <BordersView data={data} />}
+              {activeTab === "transitions" && <TransitionsView data={data} />}
+              {activeTab === "css-vars" && <CssVarsView data={data} />}
+              {activeTab === "fonts" && <FontFilesView data={data} />}
 
-          {activeTab === "hovers" && <HoversView data={data} setSelectedComp={setSelectedComp} />}
+              {activeTab === "hovers" && <HoversView data={data} setSelectedComp={setSelectedComp} />}
 
-          {activeTab === "patterns" && <PatternsView data={data} setSelectedComp={setSelectedComp} />}
-          {activeTab.startsWith("comp-") && (
-            <ComponentsView
-              data={data}
-              activeTab={activeTab}
-              activeSubFilter={activeSubFilter}
-              setActiveSubFilter={setActiveSubFilter}
-              setSelectedComp={setSelectedComp}
-            />
-          )}
-          {activeTab === "sections" && <SectionsView data={data} setSelectedSection={setSelectedSection} />}
-          {activeTab === "layout-system" && <LayoutSystemView data={data} />}
+              {activeTab === "patterns" && <PatternsView data={data} setSelectedComp={setSelectedComp} />}
+              {activeTab.startsWith("comp-") && (
+                <ComponentsView
+                  data={data}
+                  activeTab={activeTab}
+                  activeSubFilter={activeSubFilter}
+                  setActiveSubFilter={setActiveSubFilter}
+                  setSelectedComp={setSelectedComp}
+                />
+              )}
+              {activeTab === "sections" && <SectionsView data={data} setSelectedSection={setSelectedSection} />}
+              {activeTab === "layout-system" && <LayoutSystemView data={data} />}
 
-          {activeTab === "images" && <ImagesView data={data} />}
-          {activeTab === "svgs" && <SvgsView data={data} setSelectedSvg={setSelectedSvg} />}
-          {activeTab === "pseudos" && <PseudoElementsView data={data} />}
-          {activeTab === "videos" && <VideosView data={data} />}
+              {activeTab === "images" && <ImagesView data={data} />}
+              {activeTab === "svgs" && <SvgsView data={data} setSelectedSvg={setSelectedSvg} />}
+              {activeTab === "pseudos" && <PseudoElementsView data={data} />}
+              {activeTab === "videos" && <VideosView data={data} />}
 
-          {activeTab.startsWith("memory:") && (
-            <MemoryView
-              data={data}
-              groups={memoryGroups}
-              activeDoc={activeMemoryDoc}
-              markdown={memoryContent}
-              loading={memoryLoading}
-            />
-          )}
-          </div>
-        </main>
+              {activeTab.startsWith("memory:") && (
+                <MemoryView
+                  data={data}
+                  groups={memoryGroups}
+                  activeDoc={activeMemoryDoc}
+                  markdown={memoryContent}
+                  loading={memoryLoading}
+                />
+              )}
+            </div>
+          </main>
 
-        <ComponentDialog selectedComp={selectedComp} setSelectedComp={setSelectedComp} data={data} />
-        <SectionDialog selectedSection={selectedSection} setSelectedSection={setSelectedSection} data={data} setSelectedComp={setSelectedComp} />
-        <SvgDialog selectedSvg={selectedSvg} setSelectedSvg={setSelectedSvg} />
-      </div>
-    </SidebarProvider>
+          <ComponentDialog selectedComp={selectedComp} setSelectedComp={setSelectedComp} data={data} />
+          <SectionDialog selectedSection={selectedSection} setSelectedSection={setSelectedSection} data={data} setSelectedComp={setSelectedComp} />
+          <SvgDialog selectedSvg={selectedSvg} setSelectedSvg={setSelectedSvg} />
+        </div>
+      </SidebarProvider>
+    </OutputBaseProvider>
   )
 }

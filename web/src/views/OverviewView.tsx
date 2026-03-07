@@ -1,7 +1,9 @@
 import type { DesignSystemData } from "@/types/design-system"
 import { StatCard } from "@/components/shared"
+import { useOutputUrl } from "@/lib/output-base"
 
 export function OverviewView({ data, uniqueVariants }: { data: DesignSystemData, uniqueVariants: number }) {
+  const outputUrl = useOutputUrl()
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
@@ -36,7 +38,7 @@ export function OverviewView({ data, uniqueVariants }: { data: DesignSystemData,
         <div className="space-y-3 pt-6 border-t border-border">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Full Page Capture</h2>
           <div className="rounded-xl border border-border overflow-hidden bg-muted ring-1 ring-foreground/5 shadow-sm">
-            <img src={`/output/${data.fullPageScreenshot}`} alt="Full Page" loading="lazy" className="w-full h-auto object-cover" />
+            <img src={outputUrl(data.fullPageScreenshot)} alt="Full Page" loading="lazy" className="w-full h-auto object-cover" />
           </div>
         </div>
       )}

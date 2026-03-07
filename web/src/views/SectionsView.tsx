@@ -2,8 +2,10 @@ import type { DesignSystemData } from "@/types/design-system"
 import { Header } from "@/components/shared"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useOutputUrl } from "@/lib/output-base"
 
 export function SectionsView({ data, setSelectedSection }: { data: DesignSystemData, setSelectedSection: (sec: any) => void }) {
+  const outputUrl = useOutputUrl()
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <Header title="Page Sections" subtitle={`${data.sections.length} layout sections identified`} />
@@ -12,7 +14,7 @@ export function SectionsView({ data, setSelectedSection }: { data: DesignSystemD
           <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group" onClick={() => setSelectedSection(sec)}>
             {sec.screenshot && (
               <div className="border-b border-border max-h-[400px] overflow-hidden bg-muted flex items-start">
-                <img src={`/output/${sec.screenshot}`} alt={sec.name} className="w-full h-auto object-cover object-top opacity-90 group-hover:opacity-100 transition-opacity" loading="lazy" />
+                <img src={outputUrl(sec.screenshot)} alt={sec.name} className="w-full h-auto object-cover object-top opacity-90 group-hover:opacity-100 transition-opacity" loading="lazy" />
               </div>
             )}
             <div className="p-4 flex items-center justify-between gap-4">

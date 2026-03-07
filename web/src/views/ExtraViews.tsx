@@ -1,3 +1,5 @@
+import { useOutputUrl } from "@/lib/output-base"
+
 export function GradientsView({ data }: { data: any }) {
   const g = data.tokens.gradients
   if (!g || !g.length) return <div className="text-muted-foreground p-8 text-center">No gradients</div>
@@ -90,6 +92,7 @@ export function CssVarsView({ data }: { data: any }) {
 }
 
 export function FontFilesView({ data }: { data: any }) {
+  const outputUrl = useOutputUrl()
   const f = data.fontFaces
   if (!f || !f.length) return <div className="text-muted-foreground p-8 text-center">No font faces</div>
   return (
@@ -104,7 +107,7 @@ export function FontFilesView({ data }: { data: any }) {
             <div className="text-primary/80 min-w-[200px]" style={{ fontFamily: `"${ff.family}", sans-serif`, fontWeight: ff.weight }}>{ff.family}</div>
             <div className="text-foreground flex-1">weight: {ff.weight} · style: {ff.style} {ff.format && ` · ${ff.format}`}</div>
             {ff.localPath && (
-              <a href={`/output/${ff.localPath}`} download className="text-primary hover:underline shrink-0">Download</a>
+              <a href={outputUrl(ff.localPath)} download className="text-primary hover:underline shrink-0">Download</a>
             )}
           </div>
         ))}
@@ -114,6 +117,7 @@ export function FontFilesView({ data }: { data: any }) {
 }
 
 export function HoversView({ data, setSelectedComp }: { data: any, setSelectedComp?: any }) {
+  const outputUrl = useOutputUrl()
   const h = data.interactions?.hoverStates || []
   if (!h.length) return <div className="text-muted-foreground p-8 text-center">No hover states captured</div>
   return (
@@ -130,11 +134,11 @@ export function HoversView({ data, setSelectedComp }: { data: any, setSelectedCo
               <div className="flex border-b border-border">
                 <div className="flex-1 p-3 flex flex-col items-center justify-center min-h-[80px] bg-muted/30 border-r border-border">
                   <div className="text-[9px] text-muted-foreground font-semibold tracking-wider mb-2">DEFAULT</div>
-                  {comp?.screenshot && <img src={`/output/${comp.screenshot}`} className="max-h-[120px] object-contain rounded-sm" />}
+                  {comp?.screenshot && <img src={outputUrl(comp.screenshot)} className="max-h-[120px] object-contain rounded-sm" />}
                 </div>
                 <div className="flex-1 p-3 flex flex-col items-center justify-center min-h-[80px] bg-muted/30">
                   <div className="text-[9px] text-muted-foreground font-semibold tracking-wider mb-2">HOVER</div>
-                  {hv.screenshotHover && <img src={`/output/${hv.screenshotHover}`} className="max-h-[120px] object-contain rounded-sm" />}
+                  {hv.screenshotHover && <img src={outputUrl(hv.screenshotHover)} className="max-h-[120px] object-contain rounded-sm" />}
                 </div>
               </div>
               <div className="p-4">

@@ -1,8 +1,10 @@
 import type { DesignSystemData } from "@/types/design-system"
 import { Header } from "@/components/shared"
 import { Card } from "@/components/ui/card"
+import { useOutputUrl } from "@/lib/output-base"
 
 export function ImagesView({ data }: { data: DesignSystemData }) {
+  const outputUrl = useOutputUrl()
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <Header title="Images" subtitle={`${data.assets.images.length} images extracted`} />
@@ -10,9 +12,9 @@ export function ImagesView({ data }: { data: DesignSystemData }) {
         {data.assets.images.map((img, i) => (
           <Card key={i} className="bg-card border-border overflow-hidden">
             <div className="h-32 bg-muted/50 flex items-center justify-center p-4 border-b border-border">
-              <img 
-                src={img.localPath ? `/output/${img.localPath}` : img.src} 
-                alt={img.alt || "Extracted image"} 
+              <img
+                src={img.localPath ? outputUrl(img.localPath) : img.src}
+                alt={img.alt || "Extracted image"}
                 className="max-w-full max-h-full object-contain"
                 loading="lazy"
                 onError={(e) => {

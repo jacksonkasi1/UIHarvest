@@ -2,7 +2,8 @@ import {
   Palette, Type, Ruler, Square, MoonStar, Image as ImageIcon,
   PenTool, Boxes, Activity, Box, LayoutTemplate,
   Sun, Moon, FolderTree, Repeat, Wrench, FileType,
-  MousePointerClick, Spline, Frame, SquareDashedBottom, Focus, MonitorPlay, Ghost, BookText, FileText, ChevronDown
+  MousePointerClick, Spline, Frame, SquareDashedBottom, Focus, MonitorPlay, Ghost, BookText, FileText, ChevronDown,
+  Download
 } from "lucide-react"
 
 import { useMemo } from "react"
@@ -34,21 +35,22 @@ interface SidebarProps {
   setActiveSubFilter: (id: string) => void
   theme: "light" | "dark"
   toggleTheme: () => void
+  downloadUrl?: string | null
 }
 
-function NavItem({ 
-  id, 
-  icon, 
-  label, 
-  count, 
-  onClick, 
-  activeTab, 
-  setActiveTab 
-}: { 
-  id: string; 
-  icon: React.ReactNode; 
-  label: string; 
-  count?: number; 
+function NavItem({
+  id,
+  icon,
+  label,
+  count,
+  onClick,
+  activeTab,
+  setActiveTab
+}: {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  count?: number;
   onClick?: () => void;
   activeTab: string;
   setActiveTab: (id: string) => void;
@@ -56,8 +58,8 @@ function NavItem({
   const isActive = activeTab === id
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton 
-        isActive={isActive} 
+      <SidebarMenuButton
+        isActive={isActive}
         onClick={onClick ? onClick : () => setActiveTab(id)}
         tooltip={label}
       >
@@ -78,7 +80,8 @@ export function Sidebar({
   setActiveTab,
   setActiveSubFilter,
   theme,
-  toggleTheme
+  toggleTheme,
+  downloadUrl
 }: SidebarProps) {
   // Derived stats
   const compTypes = data.components.reduce((acc, c) => {
@@ -105,13 +108,26 @@ export function Sidebar({
           <div className="hidden group-data-[collapsible=icon]:flex w-full items-center justify-center">
             <PenTool className="h-5 w-5 text-primary shrink-0" />
           </div>
-          <button 
-            onClick={toggleTheme} 
-            className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors shrink-0 group-data-[collapsible=icon]:hidden"
-            title="Toggle theme"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
+          <div className="flex items-center gap-0.5 shrink-0 group-data-[collapsible=icon]:hidden">
+            {downloadUrl && (
+              <a
+                href={downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-md hover:bg-sidebar-accent text-primary/70 hover:text-primary transition-colors"
+                title="Download ZIP"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+            )}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
+              title="Toggle theme"
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </SidebarHeader>
 
@@ -143,21 +159,21 @@ export function Sidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Components</SidebarGroupLabel>
           <SidebarMenu>
-            {Object.entries(compTypes).sort((a,b)=>b[1]-a[1]).map(([type, count]) => (
-              <NavItem 
-                key={type} 
-                id={`comp-${type}`} 
-                icon={<Box />} 
-                label={type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' ') + "s"} 
-                count={count} 
+            {Object.entries(compTypes).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+              <NavItem
+                key={type}
+                id={`comp-${type}`}
+                icon={<Box />}
+                label={type.charAt(0).toUpperCase() + type.slice(1).replace('-', ' ') + "s"}
+                count={count}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
-                onClick={() => { setActiveTab(`comp-${type}`); setActiveSubFilter("all"); }} 
+                onClick={() => { setActiveTab(`comp-${type}`); setActiveSubFilter("all"); }}
               />
             ))}
           </SidebarMenu>
         </SidebarGroup>
-        
+
         <SidebarGroup>
           <SidebarGroupLabel>Interactions</SidebarGroupLabel>
           <SidebarMenu>
@@ -233,7 +249,7 @@ export function Sidebar({
                           const isActive = activeTab === id
                           return (
                             <SidebarMenuItem key={item.path}>
-                              <SidebarMenuButton 
+                              <SidebarMenuButton
                                 isActive={isActive}
                                 onClick={() => setActiveTab(id)}
                               >
