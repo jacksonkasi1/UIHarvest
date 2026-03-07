@@ -646,39 +646,54 @@ export async function runExtraction(
         } catch { }
 
         emit({ phase: "loading", message: "Waiting for fonts and images…", progress: 20 });
-        await page.evaluate(async () => {
-            await document.fonts.ready;
-            await Promise.all(
-                Array.from(document.images).map((img) => {
-                    if (img.complete) return Promise.resolve();
-                    return new Promise((resolve) => {
-                        img.onload = img.onerror = resolve;
-                        setTimeout(resolve, 8000);
-                    });
-                })
-            );
-        });
+        try {
+            await Promise.race([
+                page.evaluate(async () => {
+                    await document.fonts.ready;
+                    await Promise.all(
+                        Array.from(document.images).map((img) => {
+                            if (img.complete) return Promise.resolve();
+                            return new Promise((resolve) => {
+                                img.onload = img.onerror = resolve;
+                                setTimeout(resolve, 8000);
+                            });
+                        })
+                    );
+                }),
+                new Promise((resolve) => setTimeout(resolve, 30_000)), // 30s max wait
+            ]);
+        } catch (err) {
+            emit({ phase: "loading", message: `Font/image wait interrupted: ${(err as Error).message?.slice(0, 80)}, continuing…` });
+        }
 
-        await page.waitForTimeout(6000);
+        try {
+            await page.waitForTimeout(6000);
+        } catch {
+            emit({ phase: "loading", message: "Page wait interrupted, continuing…" });
+        }
 
         // Dismiss cookie banners
-        for (const sel of [
-            'button:has-text("Accept")',
-            'button:has-text("Accept all")',
-            'button:has-text("Got it")',
-            'button:has-text("OK")',
-            '[id*="cookie"] button',
-            '[class*="cookie"] button',
-            '[id*="consent"] button',
-        ]) {
-            try {
-                const btn = page.locator(sel).first();
-                if (await btn.isVisible({ timeout: 500 })) await btn.click();
-            } catch { }
+        try {
+            for (const sel of [
+                'button:has-text("Accept")',
+                'button:has-text("Accept all")',
+                'button:has-text("Got it")',
+                'button:has-text("OK")',
+                '[id*="cookie"] button',
+                '[class*="cookie"] button',
+                '[id*="consent"] button',
+            ]) {
+                try {
+                    const btn = page.locator(sel).first();
+                    if (await btn.isVisible({ timeout: 500 })) await btn.click();
+                } catch { }
+            }
+            await page.waitForTimeout(1000);
+            await dismissOverlays(page);
+            await page.waitForTimeout(150);
+        } catch {
+            emit({ phase: "loading", message: "Cookie/overlay dismissal interrupted, continuing…" });
         }
-        await page.waitForTimeout(1000);
-        await dismissOverlays(page);
-        await page.waitForTimeout(150);
 
         // ── Extract design system ───────────────────────────────────────────
         emit({ phase: "extracting", message: "Extracting design system…", progress: 25 });
@@ -995,7 +1010,7 @@ export async function runExtraction(
                 try {
                     await page.waitForLoadState("load", { timeout: 10_000 });
                 } catch { }
-                await page.waitForTimeout(500);
+                try { await page.waitForTimeout(500); } catch { }
 
                 // Trigger lazy loading on this page
                 try {
@@ -1022,13 +1037,16 @@ export async function runExtraction(
                 } catch { }
 
                 // Wait for fonts/images
-                await page.evaluate(async () => {
-                    await document.fonts.ready;
-                }).catch(() => { });
-                await page.waitForTimeout(2000);
+                try {
+                    await Promise.race([
+                        page.evaluate(async () => { await document.fonts.ready; }),
+                        new Promise((resolve) => setTimeout(resolve, 10_000)),
+                    ]);
+                } catch { }
+                try { await page.waitForTimeout(2000); } catch { }
 
                 // Dismiss overlays
-                await dismissOverlays(page);
+                try { await dismissOverlays(page); } catch { }
 
                 // Extract this page's design system
                 emit({
