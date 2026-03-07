@@ -16,6 +16,7 @@ import { startServer } from "./server.js";
 import { AgentDriver } from "./agent-driver.js";
 import { GeminiClient } from "./gemini-client.js";
 import { runVisionLoop } from "./vision-loop.js";
+import { MemoryGenerator } from "./memory/generator.js";
 
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "output");
@@ -646,8 +647,21 @@ async function main() {
   if (gemini.isAvailable) {
     console.log("\n🤖  Phase 2: AI Analysis (Gemini)…\n");
     try {
-      // TODO: Implement Gemini-based design system analysis
-      console.log(`\n  ✅  AI Analysis complete (Stub)`);
+      const memoryGen = new MemoryGenerator(gemini, rawData, OUTPUT);
+      const memoryResult = await memoryGen.generateAll();
+      
+      analysis = {
+        memoryOutputs: memoryResult.dir,
+        aiUsage: {
+          calls: gemini.calls,
+          tokens: gemini.usage.totalTokens,
+        }
+      };
+
+      console.log(`\n  ✅  AI Analysis complete`);
+      console.log(`      API calls: ${analysis.aiUsage.calls}`);
+      console.log(`      Tokens:    ${analysis.aiUsage.tokens?.toLocaleString() || 'Unknown'}`);
+      console.log(`      Memory:    ${analysis.memoryOutputs}`);
     } catch (err) {
       console.error("  ❌  AI Analysis failed:", (err as Error).message);
     }
