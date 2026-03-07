@@ -1,0 +1,9 @@
+node_modules
+output
+web/node_modules
+web/.vite
+.git
+.gitignore
+*.md
+.env.local
+.design-memory

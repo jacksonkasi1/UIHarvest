@@ -32,11 +32,32 @@ bunx playwright install chromium
 
 Create a `.env` file in the project root:
 
-```env
-GOOGLE_CLOUD_API_KEY=your_gemini_api_key_here
+```bash
+cp .env.example .env
+# Edit .env → add your GOOGLE_CLOUD_API_KEY
 ```
 
 Without this key the AI Vision pass (Phase 1.5) and Design Memory (Phase 2) are automatically skipped. The base scraping and extraction always run regardless.
+
+## 🌐 Web App
+
+UIHarvest also runs as a deployed web application — enter a URL in the browser and get the full extraction.
+
+```bash
+# Development (live reload)
+bun run dev
+
+# Production build + serve
+bun run start:server
+```
+
+### 🚀 Deploy to Google Cloud Run
+
+```bash
+./deploy.sh
+```
+
+All config is read from `.env` — API key, password, region, service name. See **[DEPLOY.md](./DEPLOY.md)** for the full guide (Docker, GCR, env vars reference).
 
 ## 🛠️ Usage
 
