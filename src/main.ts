@@ -20,12 +20,13 @@ import { runVisionLoop } from "./vision-loop.js";
 
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "output");
+const CHECKPOINTS = path.join(OUTPUT, "checkpoints");
 const SHOTS = path.join(OUTPUT, "screenshots");
 const ASSETS = path.join(OUTPUT, "assets");
 const FONTS = path.join(OUTPUT, "fonts");
 
 function ensureDirs() {
-  [OUTPUT, SHOTS, ASSETS, FONTS].forEach((d) => fs.mkdirSync(d, { recursive: true }));
+  [OUTPUT, CHECKPOINTS, SHOTS, ASSETS, FONTS].forEach((d) => fs.mkdirSync(d, { recursive: true }));
 }
 
 function removeOutputDir() {
@@ -34,15 +35,82 @@ function removeOutputDir() {
   }
 }
 
-async function shouldCleanOutput(force: boolean): Promise<boolean> {
+function loadJsonFile<T>(filePath: string): T | null {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+function saveJsonFile(filePath: string, value: any): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function normalizeUrl(input: string): string {
+  try {
+    const parsed = new URL(input);
+    parsed.hash = "";
+    if ((parsed.protocol === "https:" && parsed.port === "443") || (parsed.protocol === "http:" && parsed.port === "80")) {
+      parsed.port = "";
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return input.replace(/\/+$/, "") || input;
+  }
+}
+
+function urlsMatch(a: string, b: string): boolean {
+  return normalizeUrl(a) === normalizeUrl(b);
+}
+
+async function shouldCleanOutput(force: boolean, targetUrl: string, resume: boolean): Promise<boolean> {
   if (force) return true;
   if (!fs.existsSync(OUTPUT)) return false;
 
   const files = fs.readdirSync(OUTPUT);
   if (files.length === 0) return false;
 
+  const existingData = loadJsonFile<any>(path.join(OUTPUT, "design-system.json"));
+  const existingUrl = existingData?.meta?.url as string | undefined;
+
+  if (resume) {
+    if (!existingData) {
+      console.error("❌ --resume requested but no existing output checkpoint was found.");
+      process.exit(1);
+    }
+
+    if (existingUrl && !urlsMatch(existingUrl, targetUrl)) {
+      console.error(`❌ --resume target mismatch. Existing output is for ${existingUrl}. Use --force to replace it.`);
+      process.exit(1);
+    }
+
+    console.log(`ℹ️   Resuming existing output for ${existingUrl || targetUrl}.`);
+    return false;
+  }
+
+  if (existingUrl && !urlsMatch(existingUrl, targetUrl)) {
+    const warning = `⚠️   Existing output belongs to ${existingUrl}, not ${targetUrl}.`;
+
+    if (!process.stdin.isTTY) {
+      console.error(`${warning}\nUse --force to clean old output before switching sites.`);
+      process.exit(1);
+    }
+
+    const rl = readline.createInterface({ input, output });
+    try {
+      const answer = await rl.question("🧹  Output is for a different site. Clean output folder before run? (Y/n): ");
+      return answer.trim() === "" || answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
+    } finally {
+      rl.close();
+    }
+  }
+
   if (!process.stdin.isTTY) {
-    console.log("ℹ️   Existing output detected. Keeping existing files (non-interactive mode).");
+    console.log("ℹ️   Existing output detected for the same site. Keeping existing files (use --force for a clean rerun or --resume to continue). ");
     return false;
   }
 
@@ -111,6 +179,7 @@ async function main() {
   const args = process.argv.slice(2);
   const forceClean = args.includes("-f") || args.includes("--force");
   const noServe = args.includes("--no-serve");
+  const resume = args.includes("--resume");
   const url = args.find((arg) => !arg.startsWith("-"));
   if (!url) {
     console.error("\n  Usage:  npm start <url>\n");
@@ -118,7 +187,7 @@ async function main() {
     process.exit(1);
   }
 
-  if (await shouldCleanOutput(forceClean)) {
+  if (await shouldCleanOutput(forceClean, url, resume)) {
     removeOutputDir();
     console.log("🧹  Cleaned existing output folder.");
   }
@@ -148,7 +217,8 @@ async function main() {
     
     // Block unnecessary trackers, ads, and heavy media
     const isTracker = ["google-analytics", "analytics", "tracker", "doubleclick", "facebook", "mixpanel", "segment"].some(t => rUrl.includes(t));
-    if (isTracker || ["media", "websocket", "manifest", "other"].includes(rType)) {
+    // NOTE: do NOT block "other" — it includes preload/prefetch for fonts and CSS
+    if (isTracker || ["media", "websocket", "manifest"].includes(rType)) {
       return route.abort();
     }
     return route.continue();
@@ -252,7 +322,13 @@ async function main() {
 
   // Extract
   console.log("🔬  Extracting design system…");
-  const rawData = await extractDesignSystem(page);
+  let rawData: any;
+  if (resume && fs.existsSync(path.join(OUTPUT, "design-system.json"))) {
+    rawData = loadJsonFile(path.join(OUTPUT, "design-system.json"));
+    console.log("ℹ️   Loaded Phase 1 output from checkpoint.");
+  } else {
+    rawData = await extractDesignSystem(page);
+  }
 
   // Summary
   const compTypes: Record<string, number> = {};
@@ -511,6 +587,12 @@ async function main() {
 
   await browser.close();
 
+  // ── Checkpoint save after Phase 1 (before vision loop / AI analysis) ──
+  // This guarantees output is on disk even if later phases timeout or fail.
+  const jsonPath = path.join(OUTPUT, "design-system.json");
+  fs.writeFileSync(jsonPath, JSON.stringify({ ...rawData, analysis: null }, null, 2));
+  console.log(`\n💾  Phase 1 checkpoint saved → ${jsonPath}`);
+
   // ══════════════════════════════════════════════
   // PHASE 1.5: VISION LOOP INTEGRATION
   // ══════════════════════════════════════════════
@@ -518,12 +600,29 @@ async function main() {
   const gemini = new GeminiClient();
   if (gemini.isAvailable) {
     console.log("\n👁️  Phase 1.5: AI Vision Extraction Pass…");
+
+    // Clean up stale agent-browser sockets from previous failed runs
+    const abDir = path.join(os.homedir(), ".agent-browser");
+    for (const ext of ["sock", "pid"]) {
+      const f = path.join(abDir, `harvest.${ext}`);
+      if (fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch {}
+      }
+    }
+
     const driver = new AgentDriver("harvest");
     console.log("    ↳ Starting Agent-Browser and navigating to page...");
     try {
+      console.log("    ↳ Opening page in Agent-Browser...");
       await driver.open(url);
+
+      console.log("    ↳ Page opened, waiting for network to go idle...");
       await driver.waitLoad("networkidle");
+
+      console.log("    ↳ Network settled, waiting 3s for final layout stabilization...");
       await driver.wait(3000);
+
+      console.log("    ↳ Entering multi-viewport vision loop...");
       
       const visionComps = await runVisionLoop(driver, gemini, url, OUTPUT, SHOTS);
       if (visionComps && visionComps.length > 0) {
@@ -574,7 +673,6 @@ async function main() {
     analysis: analysis || null,
   };
 
-  const jsonPath = path.join(OUTPUT, "design-system.json");
   fs.writeFileSync(jsonPath, JSON.stringify(finalData, null, 2));
   console.log(`\n✅  Saved → ${jsonPath}`);
 
