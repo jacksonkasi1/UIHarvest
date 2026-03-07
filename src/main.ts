@@ -175,6 +175,22 @@ async function dismissOverlays(page: Page) {
   } catch {}
 }
 
+async function shouldRunMemory(args: string[]): Promise<boolean> {
+  if (args.includes("--memory")) return true;
+  if (args.includes("--no-memory")) return false;
+
+  if (!process.stdin.isTTY) return false;
+
+  const rl = readline.createInterface({ input, output });
+  try {
+    const answer = await rl.question("🧠  Run design-memory generation? (Y/n): ");
+    const trimmed = answer.trim().toLowerCase();
+    return trimmed === "" || trimmed === "y" || trimmed === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const forceClean = args.includes("-f") || args.includes("--force");
@@ -639,34 +655,40 @@ async function main() {
   }
 
   // ══════════════════════════════════════════════
-  // PHASE 2: AI ANALYSIS (Gemini)
+  // PHASE 2: DESIGN MEMORY GENERATION
   // ══════════════════════════════════════════════
 
   let analysis: any = null;
 
   if (gemini.isAvailable) {
-    console.log("\n🤖  Phase 2: AI Analysis (Gemini)…\n");
-    try {
-      const memoryGen = new MemoryGenerator(gemini, rawData, OUTPUT);
-      const memoryResult = await memoryGen.generateAll();
-      
-      analysis = {
-        memoryOutputs: memoryResult.dir,
-        aiUsage: {
-          calls: gemini.calls,
-          tokens: gemini.usage.totalTokens,
-        }
-      };
+    const runMemory = await shouldRunMemory(args);
 
-      console.log(`\n  ✅  AI Analysis complete`);
-      console.log(`      API calls: ${analysis.aiUsage.calls}`);
-      console.log(`      Tokens:    ${analysis.aiUsage.tokens?.toLocaleString() || 'Unknown'}`);
-      console.log(`      Memory:    ${analysis.memoryOutputs}`);
-    } catch (err) {
-      console.error("  ❌  AI Analysis failed:", (err as Error).message);
+    if (runMemory) {
+      console.log("\n🤖  Phase 2: Design Memory Generation (Gemini)…\n");
+      try {
+        const memoryGen = new MemoryGenerator(gemini, rawData, OUTPUT);
+        const memoryResult = await memoryGen.generateAll();
+
+        analysis = {
+          memoryOutputs: memoryResult.dir,
+          aiUsage: {
+            calls: gemini.calls,
+            tokens: gemini.usage.totalTokens,
+          }
+        };
+
+        console.log(`\n  ✅  Design Memory complete`);
+        console.log(`      API calls: ${analysis.aiUsage.calls}`);
+        console.log(`      Tokens:    ${analysis.aiUsage.tokens?.toLocaleString() || 'Unknown'}`);
+        console.log(`      Output:    ${analysis.memoryOutputs}`);
+      } catch (err) {
+        console.error("  ❌  Design Memory generation failed:", (err as Error).message);
+      }
+    } else {
+      console.log("\n⏭️   Skipping design memory generation (--no-memory or user chose no)\n");
     }
   } else {
-    console.log("\n⏭️   Skipping AI analysis (no GOOGLE_CLOUD_API_KEY set)\n");
+    console.log("\n⏭️   Skipping design memory generation (no GOOGLE_CLOUD_API_KEY set)\n");
   }
 
   // ── Combine & Save ──

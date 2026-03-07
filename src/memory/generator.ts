@@ -1,6 +1,27 @@
-import { GeminiClient } from "../gemini-client.js";
-import fs from "fs";
-import path from "path";
+// ** import core packages
+import fs from 'fs';
+import path from 'path';
+
+// ** import utils
+import type { GeminiClient } from '../gemini-client.js';
+
+// ** import apis
+import { runAnalyzeStage } from './analyze/index.js';
+import { runInterpretStage } from './interpret/index.js';
+import { renderStyle } from './render/style.js';
+import { renderComponents } from './render/components.js';
+import { renderLayout } from './render/layout.js';
+import { renderMotion } from './render/motion.js';
+import { renderQA } from './render/qa.js';
+import { renderPrinciples } from './render/principles.js';
+import { renderReference } from './render/reference.js';
+import { renderInstructions } from './render/instructions.js';
+import { renderDesignSystemSkill } from './render/skills/design-system.js';
+import { renderColorPaletteSkill } from './render/skills/color-palette.js';
+import { renderTypographySkill } from './render/skills/typography.js';
+import { renderComponentPatternsSkill } from './render/skills/component-patterns.js';
+import { renderLayoutStructureSkill } from './render/skills/layout-structure.js';
+import { renderMotionGuidelinesSkill } from './render/skills/motion-guidelines.js';
 
 export class MemoryGenerator {
   private ai: GeminiClient;
@@ -10,103 +31,49 @@ export class MemoryGenerator {
   constructor(ai: GeminiClient, rawData: any, outputRoot: string) {
     this.ai = ai;
     this.rawData = rawData;
-    this.outDir = path.join(outputRoot, "memory");
-    if (!fs.existsSync(this.outDir)) {
-      fs.mkdirSync(this.outDir, { recursive: true });
+    this.outDir = path.join(outputRoot, '.design-memory');
+  }
+
+  async generateAll(): Promise<{ success: boolean; dir: string }> {
+    // ── Stage 1: Analyze ──────────────────────────────────────────────────────
+    console.log('    ↳ [memory] Analyze stage — bridging rawData → IR…');
+    const partial = runAnalyzeStage(this.rawData);
+
+    // ── Stage 2: Interpret (LLM) ──────────────────────────────────────────────
+    console.log('    ↳ [memory] Interpret stage — classifying tokens with Gemini…');
+    const ir = await runInterpretStage(partial, this.ai);
+
+    // ── Stage 3: Render (write markdown) ──────────────────────────────────────
+    console.log('    ↳ [memory] Render stage — writing markdown files…');
+    const url = (this.rawData?.meta?.url as string) ?? 'unknown';
+
+    fs.mkdirSync(this.outDir, { recursive: true });
+    fs.mkdirSync(path.join(this.outDir, 'skills'), { recursive: true });
+
+    const files: Record<string, string> = {
+      'INSTRUCTIONS.md': renderInstructions(ir, url),
+      'reference.md': renderReference(ir, url),
+      'style.md': renderStyle(ir),
+      'components.md': renderComponents(ir),
+      'layout.md': renderLayout(ir),
+      'principles.md': renderPrinciples(ir),
+      'motion.md': renderMotion(ir),
+      'qa.md': renderQA(ir),
+      'skills/design-system.md': renderDesignSystemSkill(ir, url),
+      'skills/color-palette.md': renderColorPaletteSkill(ir),
+      'skills/typography.md': renderTypographySkill(ir),
+      'skills/component-patterns.md': renderComponentPatternsSkill(ir),
+      'skills/layout-structure.md': renderLayoutStructureSkill(ir),
+      'skills/motion-guidelines.md': renderMotionGuidelinesSkill(ir),
+    };
+
+    for (const [filename, content] of Object.entries(files)) {
+      const filePath = path.join(this.outDir, filename);
+      fs.writeFileSync(filePath, content, 'utf-8');
+      console.log(`    ↳   ✓ ${filename}`);
     }
-  }
 
-  async generateAll() {
-    console.log("    ↳ Generating tokens.md...");
-    await this.generateTokens();
-    
-    console.log("    ↳ Generating components.md...");
-    await this.generateComponents();
-    
-    console.log("    ↳ Generating patterns.md...");
-    await this.generatePatterns();
-    
-    console.log("    ↳ Generating doctrine.md...");
-    await this.generateDoctrine();
-    
-    console.log("    ↳ Generating remix-guide.md...");
-    await this.generateRemixGuide();
-    
+    console.log(`\n    ↳ [memory] Done → ${this.outDir}`);
     return { success: true, dir: this.outDir };
-  }
-
-  private async generateTokens() {
-    const prompt = `
-Analyze the following raw design tokens and generate a comprehensive markdown documentation file (tokens.md) for them.
-The markdown should be structured clearly with headings for Colors, Typography, Spacing, Shadows, Radii, etc.
-Include CSS variables or hex codes directly in the output. Provide brief semantic descriptions where possible based on the raw values.
-
-Raw Tokens:
-${JSON.stringify(this.rawData.tokens, null, 2)}
-`;
-    const result = await this.ai.chat(prompt, "You are an expert design system engineer creating a tokens.md file.");
-    fs.writeFileSync(path.join(this.outDir, "tokens.md"), result);
-  }
-
-  private async generateComponents() {
-    // Only pass a summary to avoid token limits
-    const compSummary = this.rawData.components.slice(0, 50).map((c: any) => ({
-      id: c.id,
-      type: c.type,
-      subType: c.subType,
-      confidence: c.confidence,
-      cssContext: Object.keys(c.cssContext || {}).length + " classes"
-    }));
-
-    const prompt = `
-Analyze the following extracted components and generate a markdown documentation file (components.md).
-Group them by type (e.g., button, card, navigation). Describe the observed component library.
-
-Raw Components (Sample):
-${JSON.stringify(compSummary, null, 2)}
-`;
-    const result = await this.ai.chat(prompt, "You are an expert design system engineer creating a components.md file.");
-    fs.writeFileSync(path.join(this.outDir, "components.md"), result);
-  }
-
-  private async generatePatterns() {
-    const patternSummary = this.rawData.patterns.map((p: any) => ({
-      id: p.id,
-      instances: p.instances.length,
-      exampleType: p.instances[0]?.type
-    }));
-
-    const prompt = `
-Analyze the following observed design patterns and generate a markdown documentation file (patterns.md).
-Discuss recurring structural compositions.
-
-Raw Patterns:
-${JSON.stringify(patternSummary, null, 2)}
-`;
-    const result = await this.ai.chat(prompt, "You are an expert design system engineer creating a patterns.md file.");
-    fs.writeFileSync(path.join(this.outDir, "patterns.md"), result);
-  }
-
-  private async generateDoctrine() {
-    const prompt = `
-Based on the extracted components, tokens, and patterns, deduce the underlying design doctrine (doctrine.md) of this interface.
-Discuss its visual aesthetic, interaction principles, accessibility approach, and structural layout philosophies.
-
-Tokens Summary: ${Object.keys(this.rawData.tokens).map(k => k + ": " + this.rawData.tokens[k].length).join(', ')}
-Total Components: ${this.rawData.components.length}
-`;
-    const result = await this.ai.chat(prompt, "You are an expert design system engineer creating a doctrine.md file.");
-    fs.writeFileSync(path.join(this.outDir, "doctrine.md"), result);
-  }
-
-  private async generateRemixGuide() {
-    const prompt = `
-Write a remix-guide.md that instructs an LLM on how to rebuild or remix this specific design system using standard web technologies (HTML, Tailwind CSS, or React).
-Provide rules of thumb, key atomic classes to construct, and common pitfalls based on the design tokens and component structure.
-
-Tokens Summary: ${Object.keys(this.rawData.tokens).map(k => k + ": " + this.rawData.tokens[k].length).join(', ')}
-`;
-    const result = await this.ai.chat(prompt, "You are an expert design system engineer creating a remix-guide.md file.");
-    fs.writeFileSync(path.join(this.outDir, "remix-guide.md"), result);
   }
 }
