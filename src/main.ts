@@ -12,7 +12,6 @@ import os from "os";
 
 // ** import apis
 import { extractDesignSystem } from "./extractor.js";
-import { DesignAnalyzer } from "./analyzer.js";
 import { startServer } from "./server.js";
 import { AgentDriver } from "./agent-driver.js";
 import { GeminiClient } from "./gemini-client.js";
@@ -639,32 +638,21 @@ async function main() {
   }
 
   // ══════════════════════════════════════════════
-  // PHASE 2: AI ANALYSIS
+  // PHASE 2: AI ANALYSIS (Gemini)
   // ══════════════════════════════════════════════
 
-  const analyzer = new DesignAnalyzer(rawData);
   let analysis: any = null;
 
-  if (analyzer.isAiAvailable) {
-    console.log("\n🤖  Phase 2: AI Analysis…\n");
+  if (gemini.isAvailable) {
+    console.log("\n🤖  Phase 2: AI Analysis (Gemini)…\n");
     try {
-      analysis = await analyzer.analyze();
-      console.log(`\n  ✅  AI Analysis complete`);
-      console.log(`      API calls: ${analysis.aiUsage.calls}`);
-      console.log(`      Tokens:    ${analysis.aiUsage.tokens.toLocaleString()}`);
-      console.log(`      Cost:      $${analysis.aiUsage.cost}`);
-      console.log(`      Named colors:    ${analysis.namedTokens.colors.length}`);
-      console.log(`      Named spacing:   ${analysis.namedTokens.spacing.length}`);
-      console.log(`      Named typography: ${analysis.namedTokens.typography.length}`);
-      console.log(`      Components:      ${analysis.componentLibrary.length}`);
-      console.log(`      Total variants:  ${analysis.componentLibrary.reduce((s: number, c: any) => s + c.variants.length, 0)}`);
-      console.log(`      Sections:        ${analysis.sectionBlueprint.length}`);
-      console.log(`      Code snippets:   ${analysis.codeSnippets.length}`);
+      // TODO: Implement Gemini-based design system analysis
+      console.log(`\n  ✅  AI Analysis complete (Stub)`);
     } catch (err) {
       console.error("  ❌  AI Analysis failed:", (err as Error).message);
     }
   } else {
-    console.log("\n⏭️   Skipping AI analysis (no OPENAI_API_KEY set)\n");
+    console.log("\n⏭️   Skipping AI analysis (no GOOGLE_CLOUD_API_KEY set)\n");
   }
 
   // ── Combine & Save ──
