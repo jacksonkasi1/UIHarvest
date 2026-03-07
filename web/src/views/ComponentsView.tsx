@@ -3,6 +3,22 @@ import { Header } from "@/components/shared"
 import { Card } from "@/components/ui/card"
 import { typeColor } from "@/lib/helpers"
 
+const formatComponentName = (name: string) => {
+  if (!name) return "Unnamed Component"
+  if (name.includes('<')) {
+    const altMatch = name.match(/alt=["']([^"']+)["']/i)
+    if (altMatch && altMatch[1]) return altMatch[1]
+    const ariaMatch = name.match(/aria-label=["']([^"']+)["']/i)
+    if (ariaMatch && ariaMatch[1]) return ariaMatch[1]
+    const textMatch = name.replace(/<[^>]*>?/gm, '').trim()
+    if (textMatch) return textMatch
+    const tagMatch = name.match(/<([a-z0-9-]+)/i)
+    if (tagMatch && tagMatch[1]) return `<${tagMatch[1]}> element`
+    return "UI Element"
+  }
+  return name
+}
+
 export function ComponentsView({ 
   data, 
   activeTab, 
@@ -64,22 +80,30 @@ export function ComponentsView({
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {visibleVariants.map((c, i) => (
-          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group flex flex-col" onClick={() => setSelectedComp(c)}>
-            <div className="bg-muted/50 flex items-center justify-center p-6 min-h-[120px] max-h-[240px] border-b border-border relative">
-              <img src={`/output/${c.screenshot}`} alt={c.name} className="max-w-full max-h-[200px] object-contain drop-shadow-md" loading="lazy" />
+          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-all duration-300 group flex flex-col" onClick={() => setSelectedComp(c)}>
+            <div className="bg-muted/30 flex items-center justify-center p-4 min-h-[160px] flex-1 border-b border-border relative overflow-hidden">
+              <img src={`/output/${c.screenshot}`} alt={c.name} className="max-w-full max-h-[220px] object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-500" loading="lazy" />
             </div>
-            <div className="p-4 flex flex-col flex-1">
-              <div className="flex items-start gap-2 mb-2 flex-wrap">
-                <span className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: typeColor(c.type) }} />
-                <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: typeColor(c.type) }}>{c.subType}</span>
-                {c.count > 1 && <span className="text-[10px] text-muted-foreground ml-auto">×{c.count}</span>}
-                {c.patternId && <span className="text-[9px] bg-[#f59e0b]/20 text-[#f59e0b] px-1.5 rounded-sm font-bold uppercase ml-2 tracking-wider">Pattern</span>}
+            <div className="p-3 flex flex-col bg-card/50">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: typeColor(c.type) }} />
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">{c.subType}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {c.patternId && <span className="text-[9px] bg-[#f59e0b]/10 text-[#f59e0b] px-1.5 py-0.5 rounded-sm font-bold uppercase tracking-wider">Pattern</span>}
+                  {c.count > 1 && <span className="text-[10px] font-medium text-muted-foreground">×{c.count}</span>}
+                </div>
               </div>
-              <h3 className="text-sm font-medium text-foreground line-clamp-2">{c.name}</h3>
-              <div className="font-mono text-[10px] text-muted-foreground mt-2">{c.rect.width}×{c.rect.height}px</div>
-              {c.children && c.children.length > 0 && (
-                <div className="text-[10px] text-muted-foreground mt-1">↳ {c.children.length} sub-component{c.children.length > 1 ? 's' : ''}</div>
-              )}
+              <h3 className="text-sm font-semibold text-foreground truncate" title={c.name}>
+                {formatComponentName(c.name)}
+              </h3>
+              <div className="flex items-center justify-between mt-1">
+                <div className="font-mono text-[10px] text-muted-foreground/70">{c.rect.width}×{c.rect.height}px</div>
+                {c.children && c.children.length > 0 && (
+                  <div className="text-[10px] text-muted-foreground/70">↳ {c.children.length} sub</div>
+                )}
+              </div>
             </div>
           </Card>
         ))}
