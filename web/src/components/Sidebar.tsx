@@ -1,15 +1,18 @@
 import {
   Palette, Type, Ruler, Square, MoonStar, Image as ImageIcon,
   PenTool, Boxes, Activity, Box, LayoutTemplate,
-  Sun, Moon, FolderTree, Repeat, Wrench, FileType, 
-  MousePointerClick, Spline, Frame, SquareDashedBottom, Focus, MonitorPlay, Ghost
+  Sun, Moon, FolderTree, Repeat, Wrench, FileType,
+  MousePointerClick, Spline, Frame, SquareDashedBottom, Focus, MonitorPlay, Ghost, BookText, FileText
 } from "lucide-react"
 
-import type { DesignSystemData } from "@/types/design-system"
+import { useMemo, useState } from "react"
+
+import type { DesignSystemData, MemoryDocumentGroup } from "@/types/design-system"
 import { NavGroup, NavItem } from "@/components/shared"
 
 interface SidebarProps {
   data: DesignSystemData
+  memoryGroups: MemoryDocumentGroup[]
   activeTab: string
   setActiveTab: (id: string) => void
   setActiveSubFilter: (id: string) => void
@@ -19,17 +22,25 @@ interface SidebarProps {
 
 export function Sidebar({
   data,
+  memoryGroups,
   activeTab,
   setActiveTab,
   setActiveSubFilter,
   theme,
   toggleTheme
 }: SidebarProps) {
+  const [memoryOpen, setMemoryOpen] = useState(true)
+
   // Derived stats
   const compTypes = data.components.reduce((acc, c) => {
     acc[c.type] = (acc[c.type] || 0) + 1
     return acc
   }, {} as { [key: string]: number })
+
+  const totalMemoryDocs = useMemo(
+    () => memoryGroups.reduce((sum, group) => sum + group.items.length, 0),
+    [memoryGroups]
+  )
 
   return (
     <aside className="w-64 flex-shrink-0 border-r border-border bg-card/30 flex flex-col overflow-y-auto">
@@ -102,6 +113,67 @@ export function Sidebar({
           <NavItem id="pseudos" icon={<Ghost />} label="Pseudo Elements" count={data.assets.pseudoElements?.length || 0} active={activeTab} onClick={setActiveTab} />
           {(data.assets.videos?.length || 0) > 0 && (
             <NavItem id="videos" icon={<MonitorPlay />} label="Videos" count={data.assets.videos.length} active={activeTab} onClick={setActiveTab} />
+          )}
+        </NavGroup>
+
+        <NavGroup title="Design Memory">
+          <NavItem
+            id={memoryGroups[0]?.items[0] ? `memory:${memoryGroups[0].items[0].path}` : "memory"}
+            icon={<BookText />}
+            label="Markdown Docs"
+            count={totalMemoryDocs}
+            active={activeTab}
+            onClick={() => {
+              if (memoryGroups[0]?.items[0]) {
+                setActiveTab(`memory:${memoryGroups[0].items[0].path}`)
+              }
+            }}
+          />
+
+          {memoryGroups.length > 0 && (
+            <div className="mt-1 space-y-1 px-2">
+              <button
+                type="button"
+                onClick={() => setMemoryOpen((value) => !value)}
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <span>Files</span>
+                <span>{memoryOpen ? "-" : "+"}</span>
+              </button>
+
+              {memoryOpen && (
+                <div className="space-y-3 pl-2">
+                  {memoryGroups.map((group) => (
+                    <div key={group.id} className="space-y-1">
+                      <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                        {group.label}
+                      </div>
+                      <div className="space-y-0.5">
+                        {group.items.map((item) => {
+                          const id = `memory:${item.path}`
+                          const isActive = activeTab === id
+                          return (
+                            <button
+                              key={item.path}
+                              type="button"
+                              onClick={() => setActiveTab(id)}
+                              className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs transition-colors ${
+                                isActive
+                                  ? "bg-indigo-500/10 text-indigo-500"
+                                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                              }`}
+                            >
+                              <FileText className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{item.title}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </NavGroup>
       </div>

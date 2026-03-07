@@ -6,7 +6,7 @@
     "start": "bun run src/main.ts",
     "extract": "bun run src/main.ts",
     "serve": "bun run src/serve.ts",
-    "web": "concurrently \"bun run src/serve.ts\" \"cd web && bun run dev\""
+    "web": "concurrently \"bun run src/serve.ts --vite-url=http://localhost:5173\" \"bun run --cwd web dev --host 0.0.0.0 --port 5173\""
   },
   "dependencies": {
     "@google/genai": "^1.44.0",

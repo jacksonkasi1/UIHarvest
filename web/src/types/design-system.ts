@@ -81,3 +81,21 @@ export interface DesignSystemData {
   };
   fullPageScreenshot?: string;
 }
+
+export interface MemoryDocumentItem {
+  path: string;
+  name: string;
+  title: string;
+  size: number;
+}
+
+export interface MemoryDocumentGroup {
+  id: string;
+  label: string;
+  items: MemoryDocumentItem[];
+}
+
+export interface MemoryDocumentResponse {
+  path: string;
+  content: string;
+}

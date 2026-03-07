@@ -725,7 +725,7 @@ async function main() {
   if (!noServe) {
     startServer(finalData, OUTPUT, ROOT);
   } else {
-    console.log("ℹ️   Skipping local server start (--no-serve).");
+    console.log("ℹ️   Skipping API server start (--no-serve).");
   }
 }
 
