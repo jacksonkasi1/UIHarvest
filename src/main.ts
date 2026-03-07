@@ -256,43 +256,64 @@ async function main() {
 
   console.log("📄  Loading page…");
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await page.goto(url, { waitUntil: "load", timeout: 90_000 });
   } catch {
     console.log("⚠️   navigation timeout, continuing…");
   }
 
+  // Wait for a stable context — some sites do a JS redirect after domcontentloaded
+  try {
+    await page.waitForLoadState("load", { timeout: 15_000 });
+  } catch {}
+  await page.waitForTimeout(500);
+
   // Spoof IntersectionObserver and scroll fast to trigger lazy load instantly
   console.log("📜  Triggering aggressive lazy loading & spoofing intersection…");
-  await page.evaluate(async () => {
-    // Override IntersectionObserver to fire immediately
-    const OriginalObserver = window.IntersectionObserver;
-    window.IntersectionObserver = function (callback: any, options: any) {
-      const observer = new OriginalObserver(callback, options);
-      const originalObserve = observer.observe.bind(observer);
-      observer.observe = (element) => {
-        originalObserve(element);
-        // Force callback trigger for this element
-        callback([{ isIntersecting: true, target: element, intersectionRatio: 1, boundingClientRect: element.getBoundingClientRect(), intersectionRect: element.getBoundingClientRect(), rootBounds: null, time: Date.now() }] as IntersectionObserverEntry[], observer);
-      };
-      return observer;
-    } as any;
-    
-    // Fast scroll to bottom
-    await new Promise<void>((resolve) => {
-      let totalHeight = 0;
-      const distance = 800;
-      const timer = setInterval(() => {
-        const scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
-        if (totalHeight >= scrollHeight) {
-          clearInterval(timer);
-          window.scrollTo(0, 0);
-          resolve();
-        }
-      }, 50); // Very fast scroll
-    });
-  });
+  // Retry the evaluate up to 3 times in case a late redirect destroys the context
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.evaluate(async () => {
+        // Override IntersectionObserver to fire immediately
+        const OriginalObserver = window.IntersectionObserver;
+        window.IntersectionObserver = function (callback: any, options: any) {
+          const observer = new OriginalObserver(callback, options);
+          const originalObserve = observer.observe.bind(observer);
+          observer.observe = (element) => {
+            originalObserve(element);
+            // Force callback trigger for this element
+            callback([{ isIntersecting: true, target: element, intersectionRatio: 1, boundingClientRect: element.getBoundingClientRect(), intersectionRect: element.getBoundingClientRect(), rootBounds: null, time: Date.now() }] as IntersectionObserverEntry[], observer);
+          };
+          return observer;
+        } as any;
+
+        // Fast scroll to bottom
+        await new Promise<void>((resolve) => {
+          let totalHeight = 0;
+          const distance = 800;
+          const timer = setInterval(() => {
+            const scrollHeight = document.body.scrollHeight;
+            window.scrollBy(0, distance);
+            totalHeight += distance;
+            if (totalHeight >= scrollHeight) {
+              clearInterval(timer);
+              window.scrollTo(0, 0);
+              resolve();
+            }
+          }, 50); // Very fast scroll
+        });
+      });
+      break; // success — exit retry loop
+    } catch (err: any) {
+      if (attempt < 3 && err?.message?.includes("Execution context was destroyed")) {
+        console.log(`⚠️   Context destroyed during scroll setup (attempt ${attempt}/3), retrying…`);
+        await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
+        await page.waitForTimeout(500);
+      } else {
+        console.log("⚠️   Scroll/intersection setup failed, continuing…", err?.message);
+        break;
+      }
+    }
+  }
 
   // Wait for any newly triggered requests to finish
   try {
