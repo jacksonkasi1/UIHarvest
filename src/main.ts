@@ -14,6 +14,9 @@ import os from "os";
 import { extractDesignSystem } from "./extractor.js";
 import { DesignAnalyzer } from "./analyzer.js";
 import { startServer } from "./server.js";
+import { AgentDriver } from "./agent-driver.js";
+import { GeminiClient } from "./gemini-client.js";
+import { runVisionLoop } from "./vision-loop.js";
 
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "output");
@@ -507,6 +510,34 @@ async function main() {
   }
 
   await browser.close();
+
+  // ══════════════════════════════════════════════
+  // PHASE 1.5: VISION LOOP INTEGRATION
+  // ══════════════════════════════════════════════
+
+  const gemini = new GeminiClient();
+  if (gemini.isAvailable) {
+    console.log("\n👁️  Phase 1.5: AI Vision Extraction Pass…");
+    const driver = new AgentDriver("harvest");
+    console.log("    ↳ Starting Agent-Browser and navigating to page...");
+    try {
+      await driver.open(url);
+      await driver.waitLoad("networkidle");
+      await driver.wait(3000);
+      
+      const visionComps = await runVisionLoop(driver, gemini, url, OUTPUT, SHOTS);
+      if (visionComps && visionComps.length > 0) {
+        rawData.components.push(...visionComps);
+        console.log(`    ↳ Added ${visionComps.length} high-quality components from Vision Agent`);
+      }
+    } catch (e) {
+      console.warn("    ⚠️  Vision extraction pass failed:", (e as Error).message);
+    } finally {
+      await driver.close();
+    }
+  } else {
+    console.log("\n⏭️   Skipping Vision extraction pass (no GOOGLE_CLOUD_API_KEY)\n");
+  }
 
   // ══════════════════════════════════════════════
   // PHASE 2: AI ANALYSIS
