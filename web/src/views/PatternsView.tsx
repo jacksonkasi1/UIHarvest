@@ -13,7 +13,7 @@ export function PatternsView({ data, setSelectedComp }: { data: DesignSystemData
           <Card key={i} className="bg-card border-border overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between bg-muted/30">
               <h3 className="font-semibold text-foreground">{p.name}</h3>
-              <Badge className="bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20">{p.instanceCount} instances</Badge>
+              <Badge className="bg-primary/10 text-primary hover:bg-primary/20">{p.instanceCount} instances</Badge>
             </div>
             <div className="p-4 space-y-4">
               <div>
@@ -29,7 +29,7 @@ export function PatternsView({ data, setSelectedComp }: { data: DesignSystemData
                     const comp = data.components.find(c => c.id === id)
                     if (!comp) return null;
                     return (
-                      <Badge key={id} variant="secondary" className="cursor-pointer hover:bg-indigo-500/20 hover:text-indigo-500 transition-colors font-normal text-xs" onClick={() => setSelectedComp(comp)}>
+                      <Badge key={id} variant="secondary" className="cursor-pointer hover:bg-primary/20 hover:text-primary transition-colors font-normal text-xs" onClick={() => setSelectedComp(comp)}>
                         {comp.name}
                       </Badge>
                     )
@@ -40,7 +40,7 @@ export function PatternsView({ data, setSelectedComp }: { data: DesignSystemData
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Template</h4>
-                    <button onClick={() => copyToClipboard(p.templateHtml!)} className="text-[10px] text-indigo-500 hover:underline">Copy HTML</button>
+                    <button onClick={() => copyToClipboard(p.templateHtml!)} className="text-[10px] text-primary hover:underline">Copy HTML</button>
                   </div>
                   <div className="bg-muted rounded-md p-3 overflow-x-auto text-xs font-mono text-muted-foreground whitespace-pre-wrap max-h-[300px] overflow-y-auto">
                     {formatHtml(p.templateHtml)}

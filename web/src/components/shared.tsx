@@ -22,7 +22,7 @@ export function NavItem({ id, icon, label, count, active, onClick }: { id: strin
       onClick={() => onClick(id)}
       className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-md transition-all duration-200 ${
         isActive 
-          ? "bg-indigo-500/10 text-indigo-500 font-medium shadow-[inset_2px_0_0_0_#6366f1]" 
+          ? "bg-primary/10 text-primary font-medium shadow-[inset_2px_0_0_0_hsl(var(--primary))]" 
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       }`}
     >
@@ -33,7 +33,7 @@ export function NavItem({ id, icon, label, count, active, onClick }: { id: strin
         <span>{label}</span>
       </div>
       {count !== undefined && (
-        <Badge variant="secondary" className={`px-1.5 min-w-5 h-5 flex items-center justify-center text-[10px] rounded-full border-none ${isActive ? "bg-indigo-500/20 text-indigo-500" : "bg-muted text-muted-foreground"}`}>
+        <Badge variant="secondary" className={`px-1.5 min-w-5 h-5 flex items-center justify-center text-[10px] rounded-full border-none ${isActive ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
           {count}
         </Badge>
       )}
@@ -44,7 +44,7 @@ export function NavItem({ id, icon, label, count, active, onClick }: { id: strin
 export function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <Card className="bg-muted/30 border-border p-4 hover:bg-muted/50 transition-colors shadow-none">
-      <div className="text-3xl font-bold text-indigo-500 mb-1">{value}</div>
+      <div className="text-3xl font-bold text-primary mb-1">{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{label}</div>
     </Card>
   )

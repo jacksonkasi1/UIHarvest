@@ -8,7 +8,7 @@ export function RadiiView({ data }: { data: DesignSystemData }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-6">
         {data.tokens.radii.map((r, i) => (
           <div key={i} className="flex flex-col items-center gap-3">
-            <div className="w-20 h-20 border-2 border-indigo-500 bg-card" style={{ borderRadius: r.value }} />
+            <div className="w-20 h-20 border-2 border-primary bg-card" style={{ borderRadius: r.value }} />
             <div className="text-center">
               <div className="font-mono text-xs text-foreground">{r.value}</div>
               <div className="text-[10px] text-muted-foreground">×{r.count}</div>

@@ -37,7 +37,7 @@ export function SvgDialog({ selectedSvg, setSelectedSvg }: SvgDialogProps) {
                 <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2"><Boxes className="w-3.5 h-3.5" /> Raw SVG</h3>
                 <button 
                   onClick={() => copyToClipboard(selectedSvg.html)}
-                  className="text-xs text-indigo-500 hover:text-indigo-400 font-medium bg-indigo-500/10 hover:bg-indigo-500/20 px-3 py-1.5 rounded-md transition-colors"
+                  className="text-xs text-primary hover:text-primary/80 font-medium bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-md transition-colors"
                 >
                   Copy SVG Code
                 </button>

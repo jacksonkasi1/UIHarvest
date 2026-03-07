@@ -41,7 +41,7 @@ export function ComponentsView({
       {Object.keys(subTypes).length > 1 && (
         <div className="flex flex-wrap gap-2 mb-6">
           <button 
-            className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${activeSubFilter === 'all' ? 'bg-indigo-500/10 border-indigo-500 text-indigo-500 font-medium' : 'bg-card border-border text-muted-foreground hover:border-muted-foreground/50'}`}
+            className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${activeSubFilter === 'all' ? 'bg-primary/10 border-primary text-primary font-medium' : 'bg-card border-border text-muted-foreground hover:border-muted-foreground/50'}`}
             onClick={() => setActiveSubFilter("all")}
           >
             All ({all.length})
@@ -49,7 +49,7 @@ export function ComponentsView({
           {Object.entries(subTypes).map(([st, c]) => (
             <button 
               key={st}
-              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${activeSubFilter === st ? 'bg-indigo-500/10 border-indigo-500 text-indigo-500 font-medium' : 'bg-card border-border text-muted-foreground hover:border-muted-foreground/50'}`}
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${activeSubFilter === st ? 'bg-primary/10 border-primary text-primary font-medium' : 'bg-card border-border text-muted-foreground hover:border-muted-foreground/50'}`}
               onClick={() => setActiveSubFilter(st)}
             >
               {st} ({c})
@@ -64,7 +64,7 @@ export function ComponentsView({
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {visibleVariants.map((c, i) => (
-          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-indigo-500/50 transition-colors group flex flex-col" onClick={() => setSelectedComp(c)}>
+          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group flex flex-col" onClick={() => setSelectedComp(c)}>
             <div className="bg-muted/50 flex items-center justify-center p-6 min-h-[120px] max-h-[240px] border-b border-border relative">
               <img src={`/output/${c.screenshot}`} alt={c.name} className="max-w-full max-h-[200px] object-contain drop-shadow-md" loading="lazy" />
             </div>

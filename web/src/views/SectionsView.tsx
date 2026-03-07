@@ -9,7 +9,7 @@ export function SectionsView({ data, setSelectedSection }: { data: DesignSystemD
       <Header title="Page Sections" subtitle={`${data.sections.length} layout sections identified`} />
       <div className="flex flex-col gap-6">
         {data.sections.map((sec, i) => (
-          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-indigo-500/50 transition-colors group" onClick={() => setSelectedSection(sec)}>
+          <Card key={i} className="bg-card border-border overflow-hidden cursor-pointer hover:border-primary/50 transition-colors group" onClick={() => setSelectedSection(sec)}>
             {sec.screenshot && (
               <div className="border-b border-border max-h-[400px] overflow-hidden bg-muted flex items-start">
                 <img src={`/output/${sec.screenshot}`} alt={sec.name} className="w-full h-auto object-cover object-top opacity-90 group-hover:opacity-100 transition-opacity" loading="lazy" />

@@ -87,55 +87,57 @@ export function MemoryView({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <Card className="overflow-hidden border-border bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+        <Card className="flex flex-col overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between gap-4 border-b px-5 py-4 bg-muted/20">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <BookOpen className="h-3.5 w-3.5" />
                 Markdown Render
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {activeDoc && <Badge variant="outline">{formatBytes(activeDoc.size)}</Badge>}
-                <Badge variant="outline">{groups.length} groups</Badge>
+                {activeDoc && <Badge variant="secondary" className="font-normal text-xs">{formatBytes(activeDoc.size)}</Badge>}
+                <Badge variant="secondary" className="font-normal text-xs">{groups.length} groups</Badge>
               </div>
             </div>
 
-            <Button onClick={handleCopy} disabled={!markdown}>
+            <Button onClick={handleCopy} disabled={!markdown} size="sm" variant="secondary" className="gap-2 shrink-0">
               <Copy className="h-4 w-4" />
               {copied ? "Copied" : "Copy markdown"}
             </Button>
           </div>
 
-          {loading ? (
-            <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
-              <div className="flex flex-col items-center gap-3">
-                <LoaderCircle className="h-7 w-7 animate-spin text-indigo-500" />
-                <p className="text-sm">Loading markdown...</p>
+          <div className="flex-1 overflow-auto bg-background">
+            {loading ? (
+              <div className="flex min-h-[400px] items-center justify-center text-muted-foreground">
+                <div className="flex flex-col items-center gap-3">
+                  <LoaderCircle className="h-6 w-6 animate-spin text-primary" />
+                  <p className="text-sm">Loading markdown...</p>
+                </div>
               </div>
-            </div>
-          ) : markdown ? (
-            <article className="memory-markdown px-6 py-6 lg:px-8 lg:py-8">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {markdown}
-              </ReactMarkdown>
-            </article>
-          ) : (
-            <div className="flex min-h-[40vh] items-center justify-center px-8 py-12 text-center text-muted-foreground">
-              No design memory content available.
-            </div>
-          )}
+            ) : markdown ? (
+              <article className="px-6 py-8 lg:px-10 lg:py-10 max-w-4xl mx-auto">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {markdown}
+                </ReactMarkdown>
+              </article>
+            ) : (
+              <div className="flex min-h-[400px] items-center justify-center px-8 py-12 text-center text-sm text-muted-foreground">
+                No design memory content available.
+              </div>
+            )}
+          </div>
         </Card>
 
         <div className="space-y-6">
-          <Card className="border-border bg-card p-5 shadow-sm">
+          <Card className="p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-foreground">Document outline</h3>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-col gap-1.5">
               {headings.length > 0 ? (
                 headings.map((heading) => (
                   <a
                     key={heading.id}
                     href={`#${heading.id}`}
-                    className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs text-muted-foreground hover:border-indigo-500/40 hover:text-foreground"
+                    className="truncate rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   >
                     {heading.label}
                   </a>
@@ -146,16 +148,16 @@ export function MemoryView({
             </div>
           </Card>
 
-          <Card className="border-border bg-card p-5 shadow-sm">
+          <Card className="p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-foreground">Source context</h3>
             <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="text-[10px] font-bold uppercase tracking-wider">URL</div>
-                <div className="mt-1 break-all font-mono text-xs">{data.meta.url}</div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">URL</div>
+                <div className="mt-1 break-all font-mono text-xs text-foreground">{data.meta.url}</div>
               </div>
-              <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="text-[10px] font-bold uppercase tracking-wider">Viewport</div>
-                <div className="mt-1 font-mono text-xs">{data.meta.viewport.width} × {data.meta.fullHeight}px</div>
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Viewport</div>
+                <div className="mt-1 font-mono text-xs text-foreground">{data.meta.viewport.width} × {data.meta.fullHeight}px</div>
               </div>
             </div>
           </Card>
@@ -167,9 +169,9 @@ export function MemoryView({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-indigo-500 tabular-nums">{value}</div>
+    <div className="flex flex-col justify-between rounded-xl border bg-card p-4 shadow-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-2 text-2xl font-bold tabular-nums text-foreground">{value}</div>
     </div>
   )
 }
@@ -177,35 +179,61 @@ function Stat({ label, value }: { label: string; value: number }) {
 const markdownComponents = {
   h1: ({ children }: { children?: ReactNode }) => {
     const label = String(children ?? "")
-    return <h1 id={slugify(label)} className="mt-8 text-4xl font-bold tracking-tight text-foreground first:mt-0">{children}</h1>
+    return <h1 id={slugify(label)} className="mt-2 scroll-m-20 text-3xl font-bold tracking-tight text-foreground first:mt-0">{children}</h1>
   },
   h2: ({ children }: { children?: ReactNode }) => {
     const label = String(children ?? "")
-    return <h2 id={slugify(label)} className="mt-10 border-t border-border pt-8 text-2xl font-semibold text-foreground">{children}</h2>
+    return <h2 id={slugify(label)} className="mt-8 scroll-m-20 border-b pb-2 text-2xl font-semibold tracking-tight text-foreground first:mt-0">{children}</h2>
   },
   h3: ({ children }: { children?: ReactNode }) => {
     const label = String(children ?? "")
-    return <h3 id={slugify(label)} className="mt-8 text-xl font-semibold text-foreground">{children}</h3>
+    return <h3 id={slugify(label)} className="mt-8 scroll-m-20 text-xl font-semibold tracking-tight text-foreground">{children}</h3>
   },
-  p: ({ children }: { children?: ReactNode }) => <p className="mt-4 text-[15px] leading-7 text-muted-foreground">{children}</p>,
-  ul: ({ children }: { children?: ReactNode }) => <ul className="mt-4 space-y-2 pl-6 text-[15px] leading-7 text-muted-foreground">{children}</ul>,
-  ol: ({ children }: { children?: ReactNode }) => <ol className="mt-4 space-y-2 pl-6 text-[15px] leading-7 text-muted-foreground">{children}</ol>,
-  li: ({ children }: { children?: ReactNode }) => <li className="list-disc">{children}</li>,
-  blockquote: ({ children }: { children?: ReactNode }) => <blockquote className="mt-6 rounded-xl border-l-4 border-indigo-500 bg-indigo-500/5 px-5 py-4 text-sm italic text-foreground/90">{children}</blockquote>,
-  code: ({ inline, children, className }: { inline?: boolean; children?: ReactNode; className?: string }) => {
-    if (inline) {
-      return <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground">{children}</code>
+  h4: ({ children }: { children?: ReactNode }) => {
+    const label = String(children ?? "")
+    return <h4 id={slugify(label)} className="mt-8 scroll-m-20 text-lg font-semibold tracking-tight text-foreground">{children}</h4>
+  },
+  p: ({ children }: { children?: ReactNode }) => <p className="leading-7 [&:not(:first-child)]:mt-5 text-[15px] text-muted-foreground">{children}</p>,
+  ul: ({ children }: { children?: ReactNode }) => <ul className="my-5 ml-6 list-disc [&>li]:mt-2 text-[15px] text-muted-foreground">{children}</ul>,
+  ol: ({ children }: { children?: ReactNode }) => <ol className="my-5 ml-6 list-decimal [&>li]:mt-2 text-[15px] text-muted-foreground">{children}</ol>,
+  li: ({ children }: { children?: ReactNode }) => <li>{children}</li>,
+  blockquote: ({ children }: { children?: ReactNode }) => (
+    <blockquote className="mt-6 border-l-2 border-primary pl-6 italic text-muted-foreground">
+      {children}
+    </blockquote>
+  ),
+  code: ({ inline, children, className, ...props }: any) => {
+    const isInline = inline || !className;
+    if (isInline) {
+      return <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-[13px] text-foreground" {...props}>{children}</code>
     }
 
     return (
-      <pre className="mt-5 overflow-x-auto rounded-xl border border-border bg-[#0b1220] px-4 py-4 text-sm text-slate-100 shadow-sm">
-        <code className={className}>{children}</code>
+      <pre className="my-6 overflow-x-auto rounded-lg border bg-muted/50 p-4 font-mono text-[13px] text-foreground shadow-sm">
+        <code className={className} {...props}>{children}</code>
       </pre>
     )
   },
-  table: ({ children }: { children?: ReactNode }) => <div className="mt-6 overflow-x-auto rounded-xl border border-border"><table className="min-w-full border-collapse text-left text-sm">{children}</table></div>,
-  thead: ({ children }: { children?: ReactNode }) => <thead className="bg-muted/60 text-foreground">{children}</thead>,
-  th: ({ children }: { children?: ReactNode }) => <th className="border-b border-border px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</th>,
-  td: ({ children }: { children?: ReactNode }) => <td className="border-b border-border px-4 py-3 align-top text-sm text-muted-foreground">{children}</td>,
-  a: ({ href, children }: { href?: string; children?: ReactNode }) => <a href={href} className="font-medium text-indigo-500 underline underline-offset-4 hover:text-indigo-400">{children}</a>,
+  table: ({ children }: { children?: ReactNode }) => (
+    <div className="my-6 w-full overflow-y-auto">
+      <table className="w-full text-sm">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: { children?: ReactNode }) => <thead className="border-b">{children}</thead>,
+  tr: ({ children }: { children?: ReactNode }) => <tr className="m-0 border-t p-0 even:bg-muted/50">{children}</tr>,
+  th: ({ children }: { children?: ReactNode }) => (
+    <th className="border-b px-4 py-2 text-left font-bold text-foreground [&[align=center]]:text-center [&[align=right]]:text-right">
+      {children}
+    </th>
+  ),
+  td: ({ children }: { children?: ReactNode }) => (
+    <td className="px-4 py-2 text-left text-muted-foreground [&[align=center]]:text-center [&[align=right]]:text-right">
+      {children}
+    </td>
+  ),
+  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+    <a href={href} className="font-medium text-primary underline underline-offset-4 hover:opacity-80 transition-opacity">
+      {children}
+    </a>
+  ),
 }

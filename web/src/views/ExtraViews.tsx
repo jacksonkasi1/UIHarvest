@@ -31,7 +31,7 @@ export function BordersView({ data }: { data: any }) {
       <div className="flex flex-col gap-2">
         {b.map((br: any, i: number) => (
           <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3">
-            <div className="text-indigo-400 min-w-[200px]" style={{ borderBottom: br.value, paddingBottom: 4 }}>{br.value}</div>
+            <div className="text-primary/80 min-w-[200px]" style={{ borderBottom: br.value, paddingBottom: 4 }}>{br.value}</div>
             <div className="text-muted-foreground">×{br.count}</div>
           </div>
         ))}
@@ -52,7 +52,7 @@ export function TransitionsView({ data }: { data: any }) {
       <div className="flex flex-col gap-2">
         {t.map((tr: any, i: number) => (
           <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3">
-            <div className="text-indigo-400 min-w-[200px]">{tr.value}</div>
+            <div className="text-primary/80 min-w-[200px]">{tr.value}</div>
             <div className="text-muted-foreground">×{tr.count}</div>
           </div>
         ))}
@@ -75,7 +75,7 @@ export function CssVarsView({ data }: { data: any }) {
           const isColor = vr.value.match(/^#[0-9a-f]{3,8}$/i) || vr.value.match(/^rgb/)
           return (
             <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3">
-              <div className="text-indigo-400 min-w-[200px]">{vr.name}</div>
+              <div className="text-primary/80 min-w-[200px]">{vr.name}</div>
               <div className="text-foreground flex-1 break-all flex items-center gap-2">
                 {isColor && <span className="inline-block w-4 h-4 rounded-sm border border-border" style={{ background: vr.value }}></span>}
                 {vr.value}
@@ -101,10 +101,10 @@ export function FontFilesView({ data }: { data: any }) {
       <div className="flex flex-col gap-2">
         {f.map((ff: any, i: number) => (
           <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3 items-center">
-            <div className="text-indigo-400 min-w-[200px]" style={{ fontFamily: `"${ff.family}", sans-serif`, fontWeight: ff.weight }}>{ff.family}</div>
+            <div className="text-primary/80 min-w-[200px]" style={{ fontFamily: `"${ff.family}", sans-serif`, fontWeight: ff.weight }}>{ff.family}</div>
             <div className="text-foreground flex-1">weight: {ff.weight} · style: {ff.style} {ff.format && ` · ${ff.format}`}</div>
             {ff.localPath && (
-              <a href={`/output/${ff.localPath}`} download className="text-indigo-500 hover:underline shrink-0">Download</a>
+              <a href={`/output/${ff.localPath}`} download className="text-primary hover:underline shrink-0">Download</a>
             )}
           </div>
         ))}
@@ -126,7 +126,7 @@ export function HoversView({ data, setSelectedComp }: { data: any, setSelectedCo
         {h.map((hv: any, i: number) => {
           const comp = data.components.find((c: any) => c.id === hv.componentId)
           return (
-            <div key={i} className="bg-card border border-border rounded-md overflow-hidden cursor-pointer hover:border-indigo-500 transition-colors" onClick={() => setSelectedComp && comp && setSelectedComp(comp)}>
+            <div key={i} className="bg-card border border-border rounded-md overflow-hidden cursor-pointer hover:border-primary transition-colors" onClick={() => setSelectedComp && comp && setSelectedComp(comp)}>
               <div className="flex border-b border-border">
                 <div className="flex-1 p-3 flex flex-col items-center justify-center min-h-[80px] bg-muted/30 border-r border-border">
                   <div className="text-[9px] text-muted-foreground font-semibold tracking-wider mb-2">DEFAULT</div>
@@ -171,7 +171,7 @@ export function LayoutSystemView({ data }: { data: any }) {
           <div className="flex flex-wrap gap-3">
             {ls.containerWidths.map((w: number, i: number) => (
               <div key={i} className="bg-card border border-border rounded-md px-4 py-3 text-center min-w-[80px]">
-                <div className="text-xl font-bold text-indigo-500">{w}</div>
+                <div className="text-xl font-bold text-primary">{w}</div>
                 <div className="text-[10px] text-muted-foreground">px</div>
               </div>
             ))}
@@ -196,7 +196,7 @@ export function PseudoElementsView({ data }: { data: any }) {
       <div className="flex flex-col gap-2">
         {p.map((pe: any, i: number) => (
           <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3">
-            <div className="text-indigo-400 min-w-[200px]">{pe.parentTag}{pe.selector}</div>
+            <div className="text-primary/80 min-w-[200px]">{pe.parentTag}{pe.selector}</div>
             <div className="text-foreground flex-1 break-all">
               content: {pe.content}
               {pe.styles?.backgroundColor && pe.styles.backgroundColor !== 'rgba(0, 0, 0, 0)' ? ` · bg: ${pe.styles.backgroundColor}` : ''}
@@ -221,7 +221,7 @@ export function VideosView({ data }: { data: any }) {
       <div className="flex flex-col gap-2">
         {v.map((vid: any, i: number) => (
           <div key={i} className="bg-card border border-border rounded-md p-3 font-mono text-xs flex gap-3">
-            <div className="text-indigo-400 min-w-[100px]">&lt;{vid.tag}&gt;</div>
+            <div className="text-primary/80 min-w-[100px]">&lt;{vid.tag}&gt;</div>
             <div className="text-foreground flex-1 truncate">{vid.src}</div>
             <div className="text-muted-foreground whitespace-nowrap">{Math.round(vid.width)}×{Math.round(vid.height)}px</div>
           </div>

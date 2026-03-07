@@ -12,7 +12,7 @@ export function SpacingView({ data }: { data: DesignSystemData }) {
           return (
             <div key={i} className="flex items-center gap-4">
               <div className="font-mono text-xs text-muted-foreground w-12 text-right">{v}px</div>
-              <div className="h-5 bg-indigo-500/80 rounded-sm min-w-[4px]" style={{ width: `${width}%` }} />
+              <div className="h-5 bg-primary/80 rounded-sm min-w-[4px]" style={{ width: `${width}%` }} />
             </div>
           )
         })}

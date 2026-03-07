@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/Sidebar"
 import { ComponentDialog } from "@/components/dialogs/ComponentDialog"
 import { SectionDialog } from "@/components/dialogs/SectionDialog"
 import { SvgDialog } from "@/components/dialogs/SvgDialog"
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 
 // ** import apis
 import {
@@ -119,7 +120,7 @@ export default function App() {
     return (
       <div className="flex h-dvh w-full items-center justify-center bg-background text-muted-foreground">
         <div className="flex flex-col items-center gap-4">
-          <Activity className="h-8 w-8 animate-pulse text-indigo-500" />
+          <Activity className="h-8 w-8 animate-pulse text-primary" />
           <p className="text-sm font-medium">Loading Design System...</p>
         </div>
       </div>
@@ -133,7 +134,7 @@ export default function App() {
         <h2 className="text-xl font-semibold text-foreground">Failed to load data</h2>
         <p className="text-sm">{error}</p>
         <p className="mt-4 max-w-md text-xs text-muted-foreground">
-          Make sure you&apos;ve run the extractor and the <code className="rounded bg-muted px-1 py-0.5 text-indigo-400">output</code> folder is available.
+          Make sure you&apos;ve run the extractor and the <code className="rounded bg-muted px-1 py-0.5 text-primary/80">output</code> folder is available.
         </p>
       </div>
     )
@@ -142,19 +143,21 @@ export default function App() {
   const uniqueVariants = new Set(data.components.map((c) => c.signature)).size
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground font-sans selection:bg-indigo-500/30">
-      <Sidebar
-        data={data}
-        memoryGroups={memoryGroups}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        setActiveSubFilter={setActiveSubFilter}
-        theme={theme}
-        toggleTheme={toggleTheme}
-      />
+    <SidebarProvider>
+      <div className="flex h-dvh overflow-hidden bg-background text-foreground font-sans selection:bg-primary/30 w-full">
+        <Sidebar
+          data={data}
+          memoryGroups={memoryGroups}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          setActiveSubFilter={setActiveSubFilter}
+          theme={theme}
+          toggleTheme={toggleTheme}
+        />
 
-      <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12">
-        <div className="mx-auto max-w-6xl space-y-8">
+        <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12 relative w-full flex flex-col">
+          <SidebarTrigger className="absolute top-4 left-4" />
+          <div className="mx-auto max-w-6xl w-full space-y-8 mt-6 lg:mt-0">
           {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
           {activeTab === "tree" && <TreeView data={data} setSelectedComp={setSelectedComp} />}
           {activeTab === "colors" && <ColorsView data={data} />}
@@ -197,12 +200,13 @@ export default function App() {
               loading={memoryLoading}
             />
           )}
-        </div>
-      </main>
+          </div>
+        </main>
 
-      <ComponentDialog selectedComp={selectedComp} setSelectedComp={setSelectedComp} data={data} />
-      <SectionDialog selectedSection={selectedSection} setSelectedSection={setSelectedSection} data={data} setSelectedComp={setSelectedComp} />
-      <SvgDialog selectedSvg={selectedSvg} setSelectedSvg={setSelectedSvg} />
-    </div>
+        <ComponentDialog selectedComp={selectedComp} setSelectedComp={setSelectedComp} data={data} />
+        <SectionDialog selectedSection={selectedSection} setSelectedSection={setSelectedSection} data={data} setSelectedComp={setSelectedComp} />
+        <SvgDialog selectedSvg={selectedSvg} setSelectedSvg={setSelectedSvg} />
+      </div>
+    </SidebarProvider>
   )
 }

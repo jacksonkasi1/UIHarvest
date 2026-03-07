@@ -90,7 +90,7 @@ export function ComponentDialog({ selectedComp, setSelectedComp, data }: Compone
                           {parent && (
                             <div className="flex flex-col bg-muted/30 rounded-md border border-border/50 p-2 text-xs font-mono">
                               <span className="text-muted-foreground mb-1">Parent</span>
-                              <span className="text-indigo-500 cursor-pointer hover:underline truncate" onClick={() => setSelectedComp(parent)} title={`${parent.type}: ${parent.name}`}>{parent.type}: {parent.name}</span>
+                              <span className="text-primary cursor-pointer hover:underline truncate" onClick={() => setSelectedComp(parent)} title={`${parent.type}: ${parent.name}`}>{parent.type}: {parent.name}</span>
                             </div>
                           )}
                           {pattern && (

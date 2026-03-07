@@ -7,7 +7,7 @@ export function OverviewView({ data, uniqueVariants }: { data: DesignSystemData,
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">{data.meta.title}</h1>
         <p className="text-muted-foreground font-mono text-xs flex items-center gap-3">
-          <a href={data.meta.url} target="_blank" rel="noreferrer" className="hover:text-indigo-500 transition-colors">{data.meta.url}</a>
+          <a href={data.meta.url} target="_blank" rel="noreferrer" className="hover:text-primary transition-colors">{data.meta.url}</a>
           <span>•</span>
           <span>{data.meta.viewport.width} × {data.meta.fullHeight}px</span>
         </p>

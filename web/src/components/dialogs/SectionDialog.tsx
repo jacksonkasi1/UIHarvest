@@ -92,7 +92,7 @@ export function SectionDialog({ selectedSection, setSelectedSection, data, setSe
                 <aside className="w-full lg:w-[320px] shrink-0 space-y-6 min-w-0">
                   <div>
                     <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2"><Type className="w-3.5 h-3.5" /> Text Content Preview</h3>
-                    <div className="p-4 bg-muted/50 rounded-md border border-border/50 text-sm text-muted-foreground leading-relaxed italic border-l-2 border-l-indigo-500">
+                    <div className="p-4 bg-muted/50 rounded-md border border-border/50 text-sm text-muted-foreground leading-relaxed italic border-l-2 border-l-primary">
                       {selectedSection.textPreview ? `"${selectedSection.textPreview}"` : "No text content found."}
                     </div>
                   </div>
