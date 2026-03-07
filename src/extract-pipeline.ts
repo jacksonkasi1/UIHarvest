@@ -19,6 +19,12 @@ import { MemoryGenerator } from "./memory/generator.js";
 // TYPES
 // ════════════════════════════════════════════════════
 
+export interface PageInfo {
+    url: string;
+    title: string;
+    path: string;
+}
+
 export interface ExtractOptions {
     url: string;
     outputDir: string;
@@ -26,12 +32,16 @@ export interface ExtractOptions {
     resume?: boolean;
     runMemory?: boolean;
     skipVision?: boolean;
+    pages?: string[];           // multi-page: specific URLs to crawl
+    crawlAll?: boolean;         // multi-page: auto-discover and crawl all pages
+    maxPages?: number;          // limit page count
     onProgress?: (event: ProgressEvent) => void;
 }
 
 export interface ProgressEvent {
     phase:
     | "init"
+    | "discovering"
     | "loading"
     | "extracting"
     | "screenshots"
@@ -42,6 +52,8 @@ export interface ProgressEvent {
     | "error";
     message: string;
     progress?: number; // 0–100
+    pageIndex?: number;  // current page (multi-page)
+    pageCount?: number;  // total pages
     summary?: ExtractionSummary;
     error?: string;
 }
@@ -191,6 +203,262 @@ function buildSummary(rawData: any, fontFileCount: number): ExtractionSummary {
         fontFaces: rawData.fontFaces.length,
         containerWidths: rawData.layoutSystem.containerWidths.join(", ") + "px",
     };
+}
+
+// ════════════════════════════════════════════════════
+// PAGE DISCOVERY
+// ════════════════════════════════════════════════════
+
+/** Noise patterns to filter out from discovered URLs */
+const SKIP_PATH_PATTERNS = [
+    /\/(login|logout|signup|sign-up|sign-in|register|auth|oauth|callback|reset|forgot)/i,
+    /\/(admin|dashboard|account|settings|profile|preferences)/i,
+    /\/(api|graphql|webhook|rss|feed|sitemap\.xml)/i,
+    /\.(pdf|zip|tar|gz|png|jpg|jpeg|gif|svg|webp|mp4|mp3|woff|woff2|css|js|json)$/i,
+    /\?/,  // skip URLs with query strings
+    /#/,   // skip fragment-only links
+];
+
+/**
+ * Discover crawlable pages from a given URL.
+ * Scans same-origin `<a>` links on the page and optionally reads sitemap.xml.
+ */
+export async function discoverPages(url: string): Promise<PageInfo[]> {
+    const origin = new URL(url).origin;
+    const seenPaths = new Set<string>();
+    const pages: PageInfo[] = [];
+
+    const browser = await chromium.launch({ headless: true });
+    const ctx = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        ignoreHTTPSErrors: true,
+    });
+
+    try {
+        const page = await ctx.newPage();
+
+        // Navigate to the target URL
+        try {
+            await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        } catch {
+            // Timeout is acceptable — we still parse whatever loaded
+        }
+
+        // Add the landing page itself
+        const landingTitle = await page.title().catch(() => "");
+        const landingPath = new URL(url).pathname || "/";
+        seenPaths.add(landingPath.replace(/\/+$/, "") || "/");
+        pages.push({ url, title: landingTitle || "Home", path: landingPath });
+
+        // Collect all same-origin <a> links
+        const links = await page.evaluate((pageOrigin: string) => {
+            const anchors = Array.from(document.querySelectorAll("a[href]"));
+            const results: { href: string; text: string }[] = [];
+            for (const a of anchors) {
+                const href = (a as HTMLAnchorElement).href;
+                if (!href) continue;
+                try {
+                    const parsed = new URL(href);
+                    if (parsed.origin === pageOrigin) {
+                        results.push({
+                            href: parsed.origin + parsed.pathname,
+                            text: (a.textContent || "").trim().slice(0, 80),
+                        });
+                    }
+                } catch { /* invalid URL */ }
+            }
+            return results;
+        }, origin);
+
+        for (const link of links) {
+            try {
+                const parsed = new URL(link.href);
+                const cleanPath = parsed.pathname.replace(/\/+$/, "") || "/";
+
+                // Skip if already seen
+                if (seenPaths.has(cleanPath)) continue;
+
+                // Skip noise patterns
+                if (SKIP_PATH_PATTERNS.some((p) => p.test(cleanPath))) continue;
+
+                seenPaths.add(cleanPath);
+                pages.push({
+                    url: link.href,
+                    title: link.text || cleanPath,
+                    path: cleanPath,
+                });
+            } catch { /* invalid URL */ }
+        }
+
+        // Try sitemap.xml for additional pages
+        try {
+            const sitemapRes = await ctx.request.get(`${origin}/sitemap.xml`, {
+                timeout: 5000,
+            });
+            if (sitemapRes.ok()) {
+                const xml = await sitemapRes.text();
+                const locMatches = xml.match(/<loc>(.*?)<\/loc>/g) || [];
+                for (const loc of locMatches) {
+                    const href = loc.replace(/<\/?loc>/g, "").trim();
+                    try {
+                        const parsed = new URL(href);
+                        if (parsed.origin !== origin) continue;
+                        const cleanPath = parsed.pathname.replace(/\/+$/, "") || "/";
+                        if (seenPaths.has(cleanPath)) continue;
+                        if (SKIP_PATH_PATTERNS.some((p) => p.test(cleanPath))) continue;
+
+                        seenPaths.add(cleanPath);
+                        pages.push({
+                            url: href,
+                            title: cleanPath,
+                            path: cleanPath,
+                        });
+                    } catch { /* invalid URL */ }
+                }
+            }
+        } catch { /* sitemap not available */ }
+
+    } finally {
+        await browser.close();
+    }
+
+    // Sort: homepage first, then by path depth, then alphabetically
+    return pages.sort((a, b) => {
+        if (a.path === "/") return -1;
+        if (b.path === "/") return 1;
+        const depthA = a.path.split("/").length;
+        const depthB = b.path.split("/").length;
+        if (depthA !== depthB) return depthA - depthB;
+        return a.path.localeCompare(b.path);
+    });
+}
+
+// ════════════════════════════════════════════════════
+// MERGE HELPERS (multi-page deduplication)
+// ════════════════════════════════════════════════════
+
+/**
+ * Merge tokens and components from a subsequent page into the primary data.
+ * Deduplicates colors, typography, spacing, etc. Tags components with source page.
+ */
+function mergePageData(primary: any, secondary: any, pageUrl: string): void {
+    // ── Colors: merge by hex ────────────────────────────────────────────
+    const existingHexes = new Set(primary.tokens.colors.map((c: any) => c.hex));
+    for (const color of secondary.tokens.colors) {
+        if (!existingHexes.has(color.hex)) {
+            primary.tokens.colors.push(color);
+            existingHexes.add(color.hex);
+        } else {
+            const existing = primary.tokens.colors.find((c: any) => c.hex === color.hex);
+            if (existing) existing.count += color.count;
+        }
+    }
+
+    // ── Gradients: merge by value ───────────────────────────────────────
+    const existingGradients = new Set(primary.tokens.gradients.map((g: any) => g.value));
+    for (const grad of secondary.tokens.gradients) {
+        if (!existingGradients.has(grad.value)) {
+            primary.tokens.gradients.push(grad);
+        }
+    }
+
+    // ── Typography: merge by signature ──────────────────────────────────
+    const typoSigs = new Set(
+        primary.tokens.typography.map((t: any) => `${t.fontSize}|${t.fontWeight}|${t.fontFamily}`)
+    );
+    for (const typo of secondary.tokens.typography) {
+        const sig = `${typo.fontSize}|${typo.fontWeight}|${typo.fontFamily}`;
+        if (!typoSigs.has(sig)) {
+            primary.tokens.typography.push(typo);
+            typoSigs.add(sig);
+        }
+    }
+
+    // ── Spacing: merge unique values ────────────────────────────────────
+    const spacingSet = new Set(primary.tokens.spacing);
+    for (const s of secondary.tokens.spacing) {
+        spacingSet.add(s);
+    }
+    primary.tokens.spacing = (Array.from(spacingSet) as number[]).sort((a, b) => a - b);
+
+    // ── Radii, shadows, borders, transitions: merge by value ────────────
+    for (const key of ["radii", "shadows", "borders", "transitions"] as const) {
+        const existingVals = new Set(primary.tokens[key].map((v: any) => v.value));
+        for (const item of secondary.tokens[key]) {
+            if (!existingVals.has(item.value)) {
+                primary.tokens[key].push(item);
+            } else {
+                const existing = primary.tokens[key].find((v: any) => v.value === item.value);
+                if (existing) existing.count += item.count;
+            }
+        }
+    }
+
+    // ── CSS Variables: merge by name ────────────────────────────────────
+    const existingVarNames = new Set(primary.cssVariables.map((v: any) => v.name));
+    for (const cssVar of secondary.cssVariables) {
+        if (!existingVarNames.has(cssVar.name)) {
+            primary.cssVariables.push(cssVar);
+        }
+    }
+
+    // ── Font faces: merge by family+weight+style ────────────────────────
+    const fontSigs = new Set(
+        primary.fontFaces.map((f: any) => `${f.family}|${f.weight}|${f.style}`)
+    );
+    for (const font of secondary.fontFaces) {
+        const sig = `${font.family}|${font.weight}|${font.style}`;
+        if (!fontSigs.has(sig)) {
+            primary.fontFaces.push(font);
+        }
+    }
+
+    // ── Components: always append, tagged with source page ──────────────
+    for (const comp of secondary.components) {
+        comp.sourcePage = pageUrl;
+        primary.components.push(comp);
+    }
+
+    // ── Sections: always append, tagged with source page ────────────────
+    for (const sec of secondary.sections) {
+        sec.sourcePage = pageUrl;
+        primary.sections.push(sec);
+    }
+
+    // ── Patterns: append new unique fingerprints ────────────────────────
+    const existingFps = new Set(primary.patterns.map((p: any) => p.fingerprint));
+    for (const pat of secondary.patterns) {
+        if (!existingFps.has(pat.fingerprint)) {
+            pat.sourcePage = pageUrl;
+            primary.patterns.push(pat);
+        }
+    }
+
+    // ── Assets: append all ──────────────────────────────────────────────
+    for (const img of secondary.assets.images) {
+        primary.assets.images.push(img);
+    }
+    for (const svg of secondary.assets.svgs) {
+        primary.assets.svgs.push(svg);
+    }
+    for (const vid of secondary.assets.videos) {
+        primary.assets.videos.push(vid);
+    }
+    for (const pseudo of secondary.assets.pseudoElements) {
+        primary.assets.pseudoElements.push(pseudo);
+    }
+
+    // ── Hover states: append ────────────────────────────────────────────
+    for (const hover of secondary.interactions.hoverStates) {
+        primary.interactions.hoverStates.push(hover);
+    }
+
+    // ── Container widths: merge ─────────────────────────────────────────
+    const cwSet = new Set(primary.layoutSystem.containerWidths);
+    for (const cw of secondary.layoutSystem.containerWidths) {
+        cwSet.add(cw);
+    }
+    primary.layoutSystem.containerWidths = (Array.from(cwSet) as number[]).sort((a, b) => a - b);
 }
 
 // ════════════════════════════════════════════════════
@@ -692,6 +960,118 @@ export async function runExtraction(
             fs.writeFileSync(path.join(FONTS, fname), f.body);
             if (rawData.fontFaces[i])
                 (rawData.fontFaces[i] as any).localPath = `fonts/${fname}`;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // MULTI-PAGE EXTRACTION (if pages array has > 1 entry)
+        // ═══════════════════════════════════════════════════════════
+
+        const pagesToCrawl = options.pages ?? [];
+        if (pagesToCrawl.length > 1) {
+            const totalPages = pagesToCrawl.length;
+            // First page is already extracted above — iterate remaining pages
+            for (let pageIdx = 1; pageIdx < totalPages; pageIdx++) {
+                const pageUrl = pagesToCrawl[pageIdx];
+                emit({
+                    phase: "extracting",
+                    message: `[Page ${pageIdx + 1}/${totalPages}] Navigating to ${pageUrl}…`,
+                    progress: Math.round(40 + (pageIdx / totalPages) * 25),
+                    pageIndex: pageIdx,
+                    pageCount: totalPages,
+                });
+
+                try {
+                    // Navigate to the next page in the same context
+                    await page.goto(pageUrl, { waitUntil: "load", timeout: 60_000 });
+                } catch {
+                    emit({
+                        phase: "extracting",
+                        message: `[Page ${pageIdx + 1}/${totalPages}] Navigation timeout, continuing…`,
+                        pageIndex: pageIdx,
+                        pageCount: totalPages,
+                    });
+                }
+
+                try {
+                    await page.waitForLoadState("load", { timeout: 10_000 });
+                } catch { }
+                await page.waitForTimeout(500);
+
+                // Trigger lazy loading on this page
+                try {
+                    await page.evaluate(async () => {
+                        await new Promise<void>((resolve) => {
+                            let totalHeight = 0;
+                            const distance = 800;
+                            const timer = setInterval(() => {
+                                const scrollHeight = document.body.scrollHeight;
+                                window.scrollBy(0, distance);
+                                totalHeight += distance;
+                                if (totalHeight >= scrollHeight) {
+                                    clearInterval(timer);
+                                    window.scrollTo(0, 0);
+                                    resolve();
+                                }
+                            }, 50);
+                        });
+                    });
+                } catch { }
+
+                try {
+                    await page.waitForLoadState("networkidle", { timeout: 10_000 });
+                } catch { }
+
+                // Wait for fonts/images
+                await page.evaluate(async () => {
+                    await document.fonts.ready;
+                }).catch(() => { });
+                await page.waitForTimeout(2000);
+
+                // Dismiss overlays
+                await dismissOverlays(page);
+
+                // Extract this page's design system
+                emit({
+                    phase: "extracting",
+                    message: `[Page ${pageIdx + 1}/${totalPages}] Extracting tokens & components…`,
+                    progress: Math.round(40 + ((pageIdx + 0.5) / totalPages) * 25),
+                    pageIndex: pageIdx,
+                    pageCount: totalPages,
+                });
+
+                try {
+                    const pageData = await extractDesignSystem(page);
+
+                    // Merge into primary data
+                    mergePageData(rawData, pageData, pageUrl);
+
+                    emit({
+                        phase: "extracting",
+                        message: `[Page ${pageIdx + 1}/${totalPages}] Merged ${pageData.components.length} components, ${pageData.tokens.colors.length} colors`,
+                        progress: Math.round(40 + ((pageIdx + 1) / totalPages) * 25),
+                        pageIndex: pageIdx,
+                        pageCount: totalPages,
+                    });
+                } catch (err) {
+                    emit({
+                        phase: "extracting",
+                        message: `[Page ${pageIdx + 1}/${totalPages}] Extraction failed: ${(err as Error).message}`,
+                        pageIndex: pageIdx,
+                        pageCount: totalPages,
+                    });
+                    // Continue to next page even if one fails
+                }
+            }
+
+            // Update summary after multi-page merge
+            const updatedSummary = buildSummary(rawData, fontFiles.length);
+            emit({
+                phase: "extracting",
+                message: `Multi-page extraction complete: ${updatedSummary.components} total components, ${updatedSummary.colors} colors across ${totalPages} pages`,
+                progress: 65,
+                summary: updatedSummary,
+                pageCount: totalPages,
+            });
         }
 
         await browser.close();

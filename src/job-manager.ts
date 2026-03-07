@@ -27,6 +27,7 @@ export interface Job {
     result: ExtractionResult | null;
     createdAt: number;
     listeners: Set<(event: ProgressEvent) => void>;
+    pages?: string[];
 }
 
 // ════════════════════════════════════════════════════
@@ -47,7 +48,7 @@ export class JobManager {
     /**
      * Create and immediately start a new extraction job.
      */
-    create(url: string, runMemory: boolean = false): Job {
+    create(url: string, runMemory: boolean = false, pages?: string[]): Job {
         const id = crypto.randomUUID().slice(0, 12);
         const outputDir = path.join(os.tmpdir(), `uiharvest-job-${id}`);
 
@@ -60,6 +61,7 @@ export class JobManager {
             result: null,
             createdAt: Date.now(),
             listeners: new Set(),
+            pages,
         };
 
         this.jobs.set(id, job);
@@ -112,6 +114,7 @@ export class JobManager {
                 resume: false,
                 runMemory,
                 skipVision: true, // Skip AgentDriver in web mode
+                pages: job.pages,
                 onProgress: (event) => {
                     job.events.push(event);
                     // Notify all live listeners

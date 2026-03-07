@@ -8,6 +8,7 @@ import path from "node:path";
 // ** import apis
 import { JobManager } from "./job-manager.js";
 import { streamTarGz } from "./zip-builder.js";
+import { discoverPages } from "./extract-pipeline.js";
 
 // ** import types
 import type { ProgressEvent } from "./extract-pipeline.js";
@@ -251,8 +252,8 @@ export function startServer(
 
   // ── Extraction API (protected) ────────────────────────────────────
 
-  app.post("/api/extract", authMiddleware, (req, res) => {
-    const { url, runMemory } = req.body;
+  app.post("/api/extract/discover", authMiddleware, async (req, res) => {
+    const { url } = req.body;
     if (!url || typeof url !== "string") {
       res.status(400).json({ error: "URL is required" });
       return;
@@ -265,7 +266,29 @@ export function startServer(
       return;
     }
 
-    const job = jobManager.create(url, runMemory ?? false);
+    try {
+      const pages = await discoverPages(url);
+      res.json({ pages });
+    } catch (err) {
+      res.status(500).json({ error: `Discovery failed: ${(err as Error).message}` });
+    }
+  });
+
+  app.post("/api/extract", authMiddleware, (req, res) => {
+    const { url, runMemory, pages } = req.body;
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ error: "URL is required" });
+      return;
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      res.status(400).json({ error: "Invalid URL" });
+      return;
+    }
+
+    const job = jobManager.create(url, runMemory ?? false, pages);
     res.json({ jobId: job.id, status: job.status });
   });
 

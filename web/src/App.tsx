@@ -19,6 +19,10 @@ import { OutputBaseProvider } from "@/lib/output-base"
 import { PasswordView } from "@/views/PasswordView"
 import { LandingView } from "@/views/LandingView"
 import { ProgressView } from "@/views/ProgressView"
+import { PageSelectorView } from "@/views/PageSelectorView"
+
+// ** import types
+import type { PageInfo } from "@/views/PageSelectorView"
 import {
   OverviewView,
   TreeView,
@@ -48,7 +52,7 @@ import {
 // APP MODES
 // ════════════════════════════════════════════════════
 
-type AppMode = "checking" | "password" | "landing" | "progress" | "explorer"
+type AppMode = "checking" | "password" | "landing" | "page-selection" | "progress" | "explorer"
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("checking")
@@ -74,6 +78,11 @@ export default function App() {
 
   // Active job API base (for explorer mode after extraction)
   const [jobApiBase, setJobApiBase] = useState<string | null>(null)
+
+  // Page selection state
+  const [discoveredPages, setDiscoveredPages] = useState<PageInfo[]>([])
+  const [selectedUrl, setSelectedUrl] = useState<string>("")
+  const [pendingRunMemory, setPendingRunMemory] = useState(false)
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -207,14 +216,26 @@ export default function App() {
     initializeApp()
   }
 
-  const handleJobStarted = (jobId: string) => {
-    setActiveJobId(jobId)
-    setMode("progress")
+  const handlePagesDiscovered = (url: string, pages: PageInfo[], runMemory: boolean) => {
+    setSelectedUrl(url)
+    setDiscoveredPages(pages)
+    setPendingRunMemory(runMemory)
+    setMode("page-selection")
   }
 
   const handleResumeJob = (jobId: string) => {
     setActiveJobId(jobId)
     setMode("progress")
+  }
+
+  const handlePagesSelected = (_selectedPages: string[]) => {
+    // The PageSelectorView already called POST /api/extract and stored jobId
+    // in localStorage. We just need to read it and transition to progress.
+    const jobId = localStorage.getItem("uih_jobId")
+    if (jobId) {
+      setActiveJobId(jobId)
+      setMode("progress")
+    }
   }
 
   const handleViewExplorer = (resultData: any) => {
@@ -235,6 +256,8 @@ export default function App() {
   const handleBackToLanding = () => {
     setActiveJobId(null)
     setJobApiBase(null)
+    setDiscoveredPages([])
+    setSelectedUrl("")
     setMode("landing")
   }
 
@@ -260,9 +283,22 @@ export default function App() {
   if (mode === "landing") {
     return (
       <LandingView
-        onJobStarted={handleJobStarted}
+        onPagesDiscovered={handlePagesDiscovered}
         existingJobId={localStorage.getItem("uih_jobId")}
         onResumeJob={handleResumeJob}
+      />
+    )
+  }
+
+  // Page selection
+  if (mode === "page-selection") {
+    return (
+      <PageSelectorView
+        url={selectedUrl}
+        pages={discoveredPages}
+        runMemory={pendingRunMemory}
+        onStartExtraction={handlePagesSelected}
+        onBack={handleBackToLanding}
       />
     )
   }

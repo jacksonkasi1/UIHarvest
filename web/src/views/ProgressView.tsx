@@ -14,6 +14,7 @@ import {
 export interface ProgressEvent {
     phase:
     | "init"
+    | "discovering"
     | "loading"
     | "extracting"
     | "screenshots"
@@ -25,6 +26,8 @@ export interface ProgressEvent {
     | "reconnect"
     message: string
     progress?: number
+    pageIndex?: number
+    pageCount?: number
     summary?: Record<string, number | string>
     error?: string
 }
@@ -199,6 +202,17 @@ export function ProgressView({ jobId, onViewExplorer, onBack }: ProgressViewProp
                         {isDone ? "Extraction Complete!" : hasError ? "Extraction Failed" : "Extracting Design System…"}
                     </h2>
                     <p className="text-xs text-muted-foreground mt-1.5 font-mono">Job: {jobId}</p>
+                    {events.length > 0 && (() => {
+                        const lastEvent = events[events.length - 1]
+                        if (lastEvent.pageCount && lastEvent.pageCount > 1) {
+                            return (
+                                <p className="text-[11px] text-chart-3 font-semibold mt-1">
+                                    Page {(lastEvent.pageIndex ?? 0) + 1} of {lastEvent.pageCount}
+                                </p>
+                            )
+                        }
+                        return null
+                    })()}
                 </div>
 
                 {/* Progress bar */}

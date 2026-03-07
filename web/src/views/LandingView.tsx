@@ -2,20 +2,23 @@
 import { useState } from "react"
 import { Globe, Zap, Download, Loader2, Sparkles } from "lucide-react"
 
+// ** import types
+import type { PageInfo } from "./PageSelectorView"
+
 
 // ════════════════════════════════════════════════════
 // LANDING VIEW
 //
-// Home page: URL input → trigger extraction → navigate to progress view.
+// Home page: URL input → discover pages → navigate to page selector.
 // ════════════════════════════════════════════════════
 
 interface LandingViewProps {
-    onJobStarted: (jobId: string) => void
+    onPagesDiscovered: (url: string, pages: PageInfo[], runMemory: boolean) => void
     existingJobId: string | null
     onResumeJob: (jobId: string) => void
 }
 
-export function LandingView({ onJobStarted, existingJobId, onResumeJob }: LandingViewProps) {
+export function LandingView({ onPagesDiscovered, existingJobId, onResumeJob }: LandingViewProps) {
     const [url, setUrl] = useState("")
     const [error, setError] = useState("")
     const [loading, setLoading] = useState(false)
@@ -50,20 +53,19 @@ export function LandingView({ onJobStarted, existingJobId, onResumeJob }: Landin
         setLoading(true)
 
         try {
-            const res = await fetch("/api/extract", {
+            const res = await fetch("/api/extract/discover", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: fullUrl, runMemory }),
+                body: JSON.stringify({ url: fullUrl }),
             })
 
             if (!res.ok) {
                 const data = await res.json().catch(() => ({ error: "Server error" }))
-                throw new Error(data.error || "Failed to start extraction")
+                throw new Error(data.error || "Failed to discover pages")
             }
 
-            const { jobId } = await res.json()
-            localStorage.setItem("uih_jobId", jobId)
-            onJobStarted(jobId)
+            const { pages } = await res.json()
+            onPagesDiscovered(fullUrl, pages, runMemory)
         } catch (err) {
             setError((err as Error).message)
         } finally {
@@ -176,7 +178,10 @@ export function LandingView({ onJobStarted, existingJobId, onResumeJob }: Landin
                        shadow-lg shadow-primary/20"
                     >
                         {loading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>Discovering pages…</span>
+                            </>
                         ) : (
                             <>
                                 <Zap className="w-4.5 h-4.5" />
