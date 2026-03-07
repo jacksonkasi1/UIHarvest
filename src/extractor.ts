@@ -787,6 +787,9 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       const s = getComputedStyle(cluster.elements[0]);
       const rootEl = cluster.elements[0];
       const rootTag = rootEl.tagName.toLowerCase();
+      const classHint = (rootEl.className || "").toString().toLowerCase();
+      const isCardClassHint = /card|tile|panel|bento|case-study|feature/.test(classHint);
+      const isCardFragmentClass = /__media|__logo|__icon|__content|__title|__image/.test(classHint);
       const hasBg = rgbToHex(s.backgroundColor) !== null;
       const parentBg = rootEl.parentElement ? rgbToHex(getComputedStyle(rootEl.parentElement).backgroundColor) : null;
       const ownBg = hasBg && rgbToHex(s.backgroundColor) !== parentBg;
@@ -811,6 +814,9 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       if (isLikelyGroupContainer) {
         score -= 15;
       }
+      if (isCardClassHint && !isCardFragmentClass && (hasMedia || hasTitle || hasText)) {
+        score += 12;
+      }
       cluster.score = score;
 
       // Classify component type based on semantic slots
@@ -826,6 +832,9 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
       } else if (hasTitle && hasText && hasSurface && !isLikelyGroupContainer) {
         cluster.resolvedType = "card";
         cluster.resolvedSubType = "text-card";
+      } else if (isCardClassHint && !isCardFragmentClass && (hasMedia || hasTitle || hasText) && !isLikelyGroupContainer) {
+        cluster.resolvedType = "card";
+        cluster.resolvedSubType = "content-card";
       } else if (hasTitle && hasText) {
         // Just text elements grouped together with no card-like styling
         cluster.resolvedType = "typography";
@@ -1141,6 +1150,53 @@ export async function extractDesignSystem(page: Page): Promise<ExtractedDesignSy
           }
         }
       }
+    });
+
+    // Class-hinted Cards (captures card grids with transparent backgrounds)
+    document.querySelectorAll("[class*='card'], [class*='tile'], [class*='bento']").forEach((node) => {
+      const el = node as HTMLElement;
+      if (!vis(el) || elementToCompId.has(el)) return;
+      const cn = (el.className || "").toString().toLowerCase();
+
+      // Skip card internals/fragments (we want full card root)
+      if (/__media|__logo|__icon|__content|__title|__image/.test(cn)) return;
+      const parentCard = el.parentElement?.closest("[class*='card'], [class*='tile'], [class*='bento']") as HTMLElement | null;
+      if (parentCard && parentCard !== el) return;
+
+      const r = el.getBoundingClientRect();
+      if (r.width < 140 || r.height < 120 || r.width > vw * 0.95 || r.height > fullH * 0.6) return;
+
+      // Must contain meaningful content, not just decoration
+      const hasHeading = !!el.querySelector("h1,h2,h3,h4,h5,h6");
+      const hasMedia = !!el.querySelector("img, picture, video, svg");
+      const hasText = (getDirectText(el).length > 10) || !!el.querySelector("p,span,a");
+      if (!hasHeading && !hasMedia && !hasText) return;
+
+      // Avoid giant wrappers that contain many card children
+      const cardChildren = el.querySelectorAll(":scope > [class*='card'], :scope > [class*='tile']").length;
+      if (cardChildren >= 2) return;
+
+      const s = getComputedStyle(el);
+      const slots = getSemanticSlots(el);
+      addComponent(
+        el,
+        "card",
+        hasMedia ? "content-card" : "text-card",
+        el.querySelector("h1,h2,h3,h4")?.textContent?.trim() || "Card",
+        {
+          backgroundColor: s.backgroundColor,
+          borderRadius: s.borderRadius,
+          boxShadow: s.boxShadow,
+          border: s.border,
+          padding: s.padding,
+          display: s.display,
+          width: `${Math.round(r.width)}px`,
+          height: `${Math.round(r.height)}px`,
+        },
+        slots,
+        72,
+        15000
+      );
     });
 
     // Navigation

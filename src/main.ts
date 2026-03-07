@@ -63,6 +63,27 @@ async function runInParallel<T>(items: T[], concurrency: number, fn: (item: T, w
   await Promise.all(workers);
 }
 
+async function waitForStableBoundingBox(loc: any, page: Page, rounds = 3) {
+  let prev: any = null;
+  let current: any = null;
+  for (let i = 0; i < rounds; i++) {
+    current = await loc.boundingBox();
+    if (!current) return null;
+    if (prev) {
+      const dx = Math.abs((current.x || 0) - (prev.x || 0));
+      const dy = Math.abs((current.y || 0) - (prev.y || 0));
+      const dw = Math.abs((current.width || 0) - (prev.width || 0));
+      const dh = Math.abs((current.height || 0) - (prev.height || 0));
+      if (dx <= 1 && dy <= 1 && dw <= 1 && dh <= 1) {
+        return current;
+      }
+    }
+    prev = current;
+    await page.waitForTimeout(60);
+  }
+  return current;
+}
+
 async function dismissOverlays(page: Page) {
   for (const sel of [
     'button[aria-label*="close" i]',
@@ -392,13 +413,25 @@ async function main() {
       await p.waitForTimeout(120);
 
       if (await loc.isVisible({ timeout: 500 })) {
-        const boxA = await loc.boundingBox();
-        await p.waitForTimeout(80);
-        const boxB = await loc.boundingBox();
-        const box = boxB || boxA;
+        const box = await waitForStableBoundingBox(loc, p);
         if (box && box.width > 5 && box.height > 5) {
           const fname = `${comp.id}.png`;
-          await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
+          // Constrain visual overflow to avoid random neighboring overlays bleeding into crop
+          await loc.evaluate((el: HTMLElement) => {
+            el.dataset.extractPrevOverflow = el.style.overflow || "";
+            el.style.overflow = "hidden";
+          }).catch(() => {});
+
+          try {
+            await loc.screenshot({ path: path.join(SHOTS, fname), type: "png", timeout: 5000, animations: "disabled" });
+          } finally {
+            await loc.evaluate((el: HTMLElement) => {
+              const prev = el.dataset.extractPrevOverflow || "";
+              el.style.overflow = prev;
+              delete el.dataset.extractPrevOverflow;
+            }).catch(() => {});
+          }
+
           const shotPath = `screenshots/${fname}`;
           (comp as any).screenshot = shotPath;
           shotCount++;

@@ -26,7 +26,11 @@ export function ComponentsView({
     if (!groups[c.signature]) groups[c.signature] = []
     groups[c.signature].push(c)
   })
-  const variants = Object.values(groups).map(g => ({ ...g[0], count: g.length }))
+  const variants = Object.values(groups).map(g => {
+    const withScreenshot = g.find((item) => !!item.screenshot)
+    const representative = withScreenshot || g[0]
+    return { ...representative, count: g.length }
+  })
   const visibleVariants = variants.filter(v => !!v.screenshot)
   const hiddenNoShot = variants.length - visibleVariants.length
 
