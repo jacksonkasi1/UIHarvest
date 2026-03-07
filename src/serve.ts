@@ -1,20 +1,14 @@
-// ** import core packages
-import fs from "node:fs";
-import path from "node:path";
+import "dotenv/config";
 
 // ** import apis
 import { startServer } from "./server.js";
 
-const ROOT = process.cwd();
-const OUTPUT = path.join(ROOT, "output");
-const dataPath = path.join(OUTPUT, "design-system.json");
-const viteUrlArg = process.argv.find((arg) => arg.startsWith("--vite-url="));
-const viteUrl = viteUrlArg?.slice("--vite-url=".length);
+// ════════════════════════════════════════════════════
+// STANDALONE WEB SERVER
+//
+// Starts the unified server in web mode (no CLI extraction).
+// Used for Docker/GCR deployment where extraction happens
+// via the /api/extract endpoint.
+// ════════════════════════════════════════════════════
 
-if (!fs.existsSync(dataPath)) {
-  console.error("❌ No extracted data found. Run the extractor first.");
-  process.exit(1);
-}
-
-const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-startServer(data, OUTPUT, ROOT, { viteUrl });
+startServer();
