@@ -4,3 +4,5 @@ output/
 dist/
 build/
 .env
+.explore/
+package-lock.json

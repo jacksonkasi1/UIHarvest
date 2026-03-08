@@ -2,8 +2,15 @@ node_modules
 output
 web/node_modules
 web/.vite
+web/dist
 .git
 .gitignore
 *.md
 .env.local
 .design-memory
+.explore
+.gemini
+.agents
+.agent
+dist
+tmp
