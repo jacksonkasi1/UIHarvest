@@ -419,6 +419,8 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         }
     }, [jobId])
 
+    const bootingTerminalEndRef = useRef<HTMLDivElement>(null)
+
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [messages, isThinking])
@@ -426,6 +428,12 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     useEffect(() => {
         terminalEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [containerLogs])
+
+    useEffect(() => {
+        if (isBootingContainer) {
+            bootingTerminalEndRef.current?.scrollIntoView({ behavior: "smooth" })
+        }
+    }, [containerLogs, isBootingContainer])
 
     const fetchFiles = async () => {
         try {
@@ -1122,15 +1130,48 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                                             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
                                         />
                                     </div>
+                                ) : isBootingContainer ? (
+                                    <div className="h-full w-full flex flex-col bg-[#1e1e1e] border-0 text-[#cccccc] font-mono text-sm leading-relaxed">
+                                        <div className="flex items-center space-x-3 p-4 border-b border-[#333333] bg-[#252526]">
+                                            <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
+                                            <span className="font-semibold text-emerald-400 tracking-wide">Booting Environment & Installing Dependencies</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-4 space-y-1.5 scrollbar-thin scrollbar-thumb-[#444444] scrollbar-track-transparent">
+                                            {containerLogs.map((log, i) => {
+                                                let badge = "info"
+                                                let msg = log
+                                                let color = "text-sky-400/90"
+                                                const match = log.match(/^\[(.*?)\]\s(.*)/)
+                                                if (match) {
+                                                    badge = match[1]
+                                                    msg = match[2]
+                                                    if (badge === "install-output" || badge === "terminal") {
+                                                        badge = "terminal"
+                                                        color = "text-gray-400"
+                                                    } else if (badge === "error") {
+                                                        color = "text-rose-400"
+                                                    } else if (badge === "mount" || badge === "cache-hit" || badge === "snapshot-save") {
+                                                        color = "text-emerald-400"
+                                                    } else if (badge === "install" || badge === "dev-start") {
+                                                        color = "text-purple-400"
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div key={i} className="flex space-x-3 items-start">
+                                                        <span className={`px-1.5 py-0.5 rounded shadow-sm bg-[#2a2a2a] text-[10px] uppercase font-bold tracking-wider shrink-0 mt-0.5 ${color}`}>
+                                                            {badge}
+                                                        </span>
+                                                        <span className={`break-words whitespace-pre-wrap ${badge === 'terminal' ? 'text-gray-400' : 'text-gray-200'}`}>{msg}</span>
+                                                    </div>
+                                                )
+                                            })}
+                                            <div ref={bootingTerminalEndRef} className="h-4" />
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className="flex flex-col items-center gap-3 text-center">
-                                        {isBootingContainer ? (
-                                            <>
-                                                <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                                                <p className="text-sm text-muted-foreground">Starting live preview…</p>
-                                                <p className="text-[10px] text-muted-foreground/40 font-mono">WebContainer → npm install → Vite</p>
-                                            </>
-                                        ) : !isReady ? (
+                                        {!isReady ? (
                                             <>
                                                 <Wand2 className="h-8 w-8 text-muted-foreground/20" />
                                                 <p className="text-sm text-muted-foreground/60">Preview appears after code generation</p>

@@ -229,18 +229,30 @@ async function _doPreWarm(onEvent: ContainerEventHandler): Promise<void> {
 
         const decoder = new TextDecoder()
         const installOutputReader = _preWarmInstallProcess.output.getReader()
+        let buffer = ""
+        let lastEmit = Date.now()
+
         void (async () => {
             try {
                 while (true) {
                     if (_cancelPreWarm) break
                     const { done, value } = await installOutputReader.read()
-                    if (done) break
+                    if (done) {
+                        if (buffer.trim().length > 0) onEvent({ type: "install-output", message: buffer.trim() })
+                        break
+                    }
                     const text = typeof value === "string" ? value : decoder.decode(value)
-                    const cleanText = text
-                        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
-                        .trim()
-                    if (cleanText.length > 0) {
-                        onEvent({ type: "install-output", message: cleanText })
+                    const cleanText = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
+                    buffer += cleanText
+
+                    // Throttle emits to every 100ms
+                    if (Date.now() - lastEmit > 100) {
+                        const lines = buffer.split("\n")
+                        buffer = lines.pop() || "" // keep the last incomplete line
+                        for (const line of lines) {
+                            if (line.trim().length > 0) onEvent({ type: "install-output", message: line.trim() })
+                        }
+                        lastEmit = Date.now()
                     }
                 }
             } catch {
@@ -357,17 +369,28 @@ async function _startDevServer(
 
     const decoder = new TextDecoder()
     const devOutputReader = devProcess.output.getReader()
+    let buffer = ""
+    let lastEmit = Date.now()
+
     void (async () => {
         try {
             while (true) {
                 const { done, value } = await devOutputReader.read()
-                if (done) break
+                if (done) {
+                    if (buffer.trim().length > 0) onEvent({ type: "terminal", message: buffer.trim() })
+                    break
+                }
                 const text = typeof value === "string" ? value : decoder.decode(value)
-                const cleanText = text
-                    .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
-                    .trim()
-                if (cleanText.length > 0) {
-                    onEvent({ type: "terminal", message: cleanText })
+                const cleanText = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
+                buffer += cleanText
+
+                if (Date.now() - lastEmit > 50) {
+                    const lines = buffer.split("\n")
+                    buffer = lines.pop() || ""
+                    for (const line of lines) {
+                        if (line.trim().length > 0) onEvent({ type: "terminal", message: line.trim() })
+                    }
+                    lastEmit = Date.now()
                 }
             }
         } catch {
@@ -456,17 +479,28 @@ export async function installPackages(
 
         const decoder = new TextDecoder()
         const outputReader = installProcess.output.getReader()
+        let buffer = ""
+        let lastEmit = Date.now()
+
         void (async () => {
             try {
                 while (true) {
                     const { done, value } = await outputReader.read()
-                    if (done) break
+                    if (done) {
+                        if (buffer.trim().length > 0) onEvent?.({ type: "install-output", message: buffer.trim() })
+                        break
+                    }
                     const text = typeof value === "string" ? value : decoder.decode(value)
-                    const cleanText = text
-                        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
-                        .trim()
-                    if (cleanText.length > 0) {
-                        onEvent?.({ type: "install-output", message: cleanText })
+                    const cleanText = text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
+                    buffer += cleanText
+
+                    if (Date.now() - lastEmit > 100) {
+                        const lines = buffer.split("\n")
+                        buffer = lines.pop() || ""
+                        for (const line of lines) {
+                            if (line.trim().length > 0) onEvent?.({ type: "install-output", message: line.trim() })
+                        }
+                        lastEmit = Date.now()
                     }
                 }
             } catch {
