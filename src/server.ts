@@ -9,9 +9,14 @@ import path from "node:path";
 import { JobManager } from "./job-manager.js";
 import { streamTarGz } from "./zip-builder.js";
 import { discoverPages } from "./extract-pipeline.js";
+import { RemixManager } from "./remix/remix-manager.js";
 
 // ** import types
 import type { ProgressEvent } from "./extract-pipeline.js";
+import type { RemixProgressEvent } from "./remix/types.js";
+
+// ** import apis (chat)
+import { handleChatMessage } from "./remix/chat-handler.js";
 
 // ════════════════════════════════════════════════════
 // MEMORY INDEX HELPERS (preserved from original)
@@ -216,9 +221,17 @@ export function startServer(
   const app = express();
   const port = Number(process.env.PORT || 3333);
   const jobManager = new JobManager();
+  const remixManager = new RemixManager();
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
   app.use(cookieParser());
+
+  // WebContainer requires cross-origin isolation (SharedArrayBuffer)
+  app.use((_req, res, next) => {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+    next();
+  });
 
   // ── Auth endpoints ──────────────────────────────────────────────────
 
@@ -432,6 +445,171 @@ export function startServer(
     }
 
     express.static(job.outputDir)(req, res, next);
+  });
+
+  // ── Remix API (protected) ─────────────────────────────────────────────
+
+  app.post("/api/remix", authMiddleware, (req, res) => {
+    const { referenceUrl, targetUrl, brandOverrides, prompt } = req.body;
+
+    if (!referenceUrl && !prompt) {
+      res.status(400).json({ error: "referenceUrl or prompt is required" });
+      return;
+    }
+
+    if (referenceUrl) {
+      try {
+        new URL(referenceUrl);
+        if (targetUrl) new URL(targetUrl);
+      } catch {
+        res.status(400).json({ error: "Invalid URL" });
+        return;
+      }
+    }
+
+    const job = remixManager.create({ referenceUrl, targetUrl, brandOverrides, initialPrompt: prompt });
+    res.json({ jobId: job.id, status: job.status, phase: job.phase });
+  });
+
+  app.get("/api/remix/:id/progress", authMiddleware, (req, res) => {
+    const job = remixManager.get(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Remix job not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const keepAlive = setInterval(() => {
+      res.write(": keep-alive\n\n");
+    }, 15_000);
+
+    const listener = (event: RemixProgressEvent) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    const unsubscribe = remixManager.subscribe(job.id, listener);
+
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      if (unsubscribe) unsubscribe();
+    });
+  });
+
+  app.get("/api/remix/:id/files", authMiddleware, (req, res) => {
+    const job = remixManager.get(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Remix job not found" });
+      return;
+    }
+
+    if (job.status !== "done" && job.phase !== "ready") {
+      res.status(202).json({ status: job.status, phase: job.phase, message: "Still generating" });
+      return;
+    }
+
+    res.json({ files: job.files, spec: job.result?.spec });
+  });
+
+  app.post("/api/remix/:id/iterate", authMiddleware, async (req, res) => {
+    const { prompt, images } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      res.status(400).json({ error: "prompt is required" });
+      return;
+    }
+
+    // images is optional: array of { data: base64string, mimeType: string }
+    const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
+
+    const files = await remixManager.iterate(req.params.id, prompt, imageAttachments);
+    if (!files) {
+      res.status(404).json({ error: "Job not found or not ready" });
+      return;
+    }
+
+    res.json({ files });
+  });
+
+  // ── Streaming Chat API (SSE) ───────────────────────────────────────────────
+  app.post("/api/remix/:id/chat", authMiddleware, async (req, res) => {
+    const { prompt, images } = req.body;
+    if (!prompt || typeof prompt !== "string") {
+      res.status(400).json({ error: "prompt is required" });
+      return;
+    }
+
+    const chatDeps = remixManager.getChatDeps(req.params.id);
+    if (!chatDeps) {
+      res.status(404).json({ error: "Job not found or not ready" });
+      return;
+    }
+
+    // SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    // Send initial SSE comment to prime the connection
+    res.write(": connected\n\n");
+
+    // Keepalive to prevent proxy timeout
+    const keepAlive = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(": keep-alive\n\n");
+      }
+    }, 15_000);
+
+    // Abort controller for stop/cancel
+    const controller = new AbortController();
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      controller.abort();
+    });
+
+    const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
+
+    try {
+      await handleChatMessage(
+        res,
+        prompt,
+        imageAttachments,
+        chatDeps,
+        controller.signal
+      );
+    } catch (err) {
+      console.error("[chat-endpoint] Error:", (err as Error).message);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ type: "error", error: (err as Error).message })}\n\n`);
+      }
+    }
+
+    clearInterval(keepAlive);
+    if (!res.writableEnded) {
+      res.end();
+    }
+  });
+
+  app.get("/api/remix/:id/status", authMiddleware, (req, res) => {
+    const job = remixManager.get(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Remix job not found" });
+      return;
+    }
+
+    res.json({
+      id: job.id,
+      status: job.status,
+      phase: job.phase,
+      referenceUrl: job.referenceUrl,
+      targetUrl: job.targetUrl,
+      fileCount: job.files.length,
+    });
   });
 
   // ── Legacy CLI endpoints (backward-compat) ──────────────────────────
