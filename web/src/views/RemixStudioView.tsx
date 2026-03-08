@@ -1,12 +1,10 @@
 // ** import core packages
 import { useEffect, useRef, useState, useCallback } from "react"
 import {
-    Send, Download, Loader2, CheckCircle, AlertCircle,
-    Bot, User, Wand2, Monitor, Tablet, Smartphone,
-    Play, Terminal, Eye, Code2, X, ImagePlus, Paperclip,
+    Loader2, CheckCircle, AlertCircle, Wand2, Monitor,
+    Terminal, Eye, Code2, X,
     RefreshCw, Square, ChevronDown, ChevronRight, FileCode2,
-    Sparkles, Zap, Palette, Layout, Type, MessageSquare,
-    Maximize2, ExternalLink, Clock
+    Sparkles, Zap, Palette, Layout, Type, MessageSquare, GlobeLock, Check, Plus, ArrowUp
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -86,17 +84,6 @@ interface RemixStudioProps {
 // CONSTANTS
 // ════════════════════════════════════════════════════
 
-const PHASE_LABELS: Record<string, string> = {
-    init: "Initializing…",
-    "extracting-reference": "Analyzing reference…",
-    "extracting-target": "Extracting brand…",
-    "building-spec": "Building spec…",
-    "generating-scaffold": "Scaffolding…",
-    "generating-pages": "Generating code…",
-    ready: "Ready",
-    iterating: "Applying changes…",
-    error: "Error",
-}
 
 type RightPanel = "preview" | "code" | "terminal"
 
@@ -105,8 +92,7 @@ const SUGGESTION_CHIPS = [
     { label: "Add a footer", icon: Layout, prompt: "Add a beautiful footer section with links, social media icons, and a newsletter signup" },
     { label: "Better typography", icon: Type, prompt: "Improve the typography hierarchy — make headings bolder, add better letter-spacing and line-height" },
     { label: "Add animations", icon: Zap, prompt: "Add subtle entrance animations and hover effects to make the page feel more alive" },
-    { label: "Make it darker", icon: Wand2, prompt: "Switch to a dark theme with rich, deep backgrounds and bright accent colors" },
-    { label: "What can you do?", icon: MessageSquare, prompt: "What kind of changes can you help me make to this website?" },
+    { label: "Dark Mode", icon: Wand2, prompt: "Switch to a dark theme with rich, deep backgrounds and bright accent colors" }
 ]
 
 // ════════════════════════════════════════════════════
@@ -156,39 +142,39 @@ function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
     const [expanded, setExpanded] = useState(false)
 
     return (
-        <div className="my-1.5 rounded-lg border border-border/30 bg-background/50 backdrop-blur-sm overflow-hidden transition-all duration-200 hover:border-border/50">
+        <div className="my-1.5 rounded-lg border border-gray-200 bg-white overflow-hidden transition-all duration-200 hover:border-gray-300 hover:shadow-sm">
             <button
-                className="flex items-center gap-2 w-full px-3 py-2 text-left text-[11px] transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 text-left text-[12px] transition-colors"
                 onClick={() => setExpanded(!expanded)}
             >
                 {exec.status === "running" ? (
                     <div className="relative">
-                        <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary relative" />
+                        <div className="absolute inset-0 rounded-full bg-blue-100 animate-ping" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600 relative" />
                     </div>
                 ) : exec.status === "complete" ? (
                     <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
                 ) : (
-                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
                 )}
-                <FileCode2 className="h-3 w-3 text-muted-foreground/60" />
-                <span className="flex-1 text-foreground/80 font-medium truncate">
+                <FileCode2 className="h-3 w-3 text-gray-400" />
+                <span className="flex-1 text-gray-700 font-medium truncate">
                     {exec.message}
                 </span>
                 {exec.filesChanged !== undefined && (
-                    <span className="text-[10px] text-primary/70 font-mono shrink-0">
+                    <span className="text-[11px] text-gray-400 font-mono shrink-0">
                         {exec.filesChanged} file{exec.filesChanged !== 1 ? "s" : ""}
                     </span>
                 )}
                 {expanded ? (
-                    <ChevronDown className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    <ChevronDown className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                 ) : (
-                    <ChevronRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                    <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                 )}
             </button>
             {expanded && exec.summary && (
-                <div className="px-3 pb-2.5 pt-0 text-[10px] text-muted-foreground/80 border-t border-border/20 mt-0">
-                    <p className="pt-1.5 leading-relaxed">{exec.summary}</p>
+                <div className="px-3 pb-2.5 pt-0 text-[11px] text-gray-600 border-t border-gray-100 mt-0">
+                    <p className="pt-2 leading-relaxed">{exec.summary}</p>
                 </div>
             )}
         </div>
@@ -201,15 +187,15 @@ function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
 
 function MarkdownContent({ content }: { content: string }) {
     return (
-        <div className="prose prose-sm prose-invert max-w-none text-[13px] leading-relaxed
-            prose-p:my-1 prose-p:text-foreground/80
-            prose-headings:text-foreground prose-headings:mt-2 prose-headings:mb-1 prose-headings:text-sm
-            prose-code:text-primary/90 prose-code:bg-primary/8 prose-code:rounded-md prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[11px] prose-code:font-mono
-            prose-pre:bg-[#111] prose-pre:rounded-lg prose-pre:my-2 prose-pre:text-[11px] prose-pre:border prose-pre:border-border/20
-            prose-strong:text-foreground prose-strong:font-semibold
-            prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-li:text-foreground/75
-            prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-            prose-blockquote:border-primary/30 prose-blockquote:text-muted-foreground">
+        <div className="prose prose-sm max-w-none text-[14px] leading-relaxed text-gray-800
+            prose-p:my-1.5 prose-p:text-gray-700
+            prose-headings:text-gray-900 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:text-sm
+            prose-code:text-blue-700 prose-code:bg-blue-50/50 prose-code:rounded-md prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-code:font-mono
+            prose-pre:bg-gray-50 prose-pre:rounded-xl prose-pre:my-3 prose-pre:text-[12px] prose-pre:border prose-pre:border-gray-200
+            prose-strong:text-gray-900 prose-strong:font-semibold
+            prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-li:text-gray-700
+            prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
+            prose-blockquote:border-l-2 prose-blockquote:border-gray-200 prose-blockquote:text-gray-500 prose-blockquote:pl-4 prose-blockquote:my-2">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {content}
             </ReactMarkdown>
@@ -223,17 +209,17 @@ function MarkdownContent({ content }: { content: string }) {
 
 function ThinkingIndicator() {
     return (
-        <div className="flex gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/10">
-                <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+        <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 px-1 py-2">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
+                <Sparkles className="h-4 w-4 text-gray-400 animate-pulse" />
             </div>
-            <div className="rounded-xl bg-muted/20 border border-border/20 px-4 py-2.5 text-xs text-muted-foreground flex items-center gap-3">
-                <div className="flex gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="flex items-center gap-2">
+                <span className="text-[13px] text-gray-500 font-medium">Thought for a moment</span>
+                <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
-                <span className="text-muted-foreground/60 text-[11px]">Thinking…</span>
             </div>
         </div>
     )
@@ -253,45 +239,32 @@ function WelcomeState({
     onSuggestionClick: (prompt: string) => void
 }) {
     return (
-        <div className="space-y-4 animate-in fade-in duration-500">
-            <div className="flex gap-2.5">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/10">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
+        <div className="space-y-6 animate-in fade-in duration-500 pt-2 px-1">
+            <div className="space-y-4">
+                <div className="font-semibold text-gray-900 text-base">
+                    {containerReady ? "Your remix is live! 🎉" : isBootingContainer ? "Code generated!" : "Your remix is ready!"}
                 </div>
-                <div className="space-y-2">
-                    <div className="rounded-xl bg-muted/20 border border-border/20 px-4 py-3 text-[13px] text-foreground/80 leading-relaxed">
-                        {containerReady ? (
-                            <>
-                                <p className="font-medium text-foreground mb-1">Your remix is live! 🎉</p>
-                                <p className="text-muted-foreground text-xs">Chat with me about anything, or ask me to make changes — colors, layout, sections, typography, animations.</p>
-                            </>
-                        ) : isBootingContainer ? (
-                            <>
-                                <p className="font-medium text-foreground mb-1">Code generated!</p>
-                                <p className="text-muted-foreground text-xs">Starting the live preview environment…</p>
-                            </>
-                        ) : (
-                            <>
-                                <p className="font-medium text-foreground mb-1">Your remix is ready!</p>
-                                <p className="text-muted-foreground text-xs">Ask me to make changes — I can modify anything.</p>
-                            </>
-                        )}
-                    </div>
+                <div className="text-[14px] text-gray-600 leading-relaxed">
+                    {containerReady
+                        ? "I'll create a stunning workspace inspired by clean, modern design principles. Chat with me about anything, or ask me to make changes — colors, layout, sections, typography, animations."
+                        : isBootingContainer
+                            ? "Starting the live preview environment… I'll be ready in just a moment."
+                            : "Ask me to make changes — I can modify anything."}
                 </div>
             </div>
 
             {/* Suggestion chips */}
             {containerReady && (
-                <div className="pl-9 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-200">
-                    <p className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium mb-2">Try asking</p>
-                    <div className="flex flex-wrap gap-1.5">
+                <div className="pt-2 animate-in fade-in slide-in-from-bottom-3 duration-500 delay-200">
+                    <p className="text-[12px] text-gray-800 font-semibold mb-3">Features for V1:</p>
+                    <div className="flex flex-col gap-2 relative z-0">
                         {SUGGESTION_CHIPS.map((chip) => (
                             <button
                                 key={chip.label}
-                                className="flex items-center gap-1.5 rounded-full border border-border/30 bg-background/50 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/30 hover:bg-primary/5 transition-all duration-200 backdrop-blur-sm"
+                                className="flex items-center gap-3 w-full text-left text-[13px] text-gray-600 hover:text-gray-900 group"
                                 onClick={() => onSuggestionClick(chip.prompt)}
                             >
-                                <chip.icon className="h-3 w-3" />
+                                <span className="w-1 h-1 rounded-full bg-gray-300 group-hover:bg-gray-500 transition-colors" />
                                 {chip.label}
                             </button>
                         ))}
@@ -323,14 +296,14 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
 
-    const [viewportSize, setViewportSize] = useState<"desktop" | "tablet" | "mobile">("desktop")
+    const [viewportSize] = useState<"desktop" | "tablet" | "mobile">("desktop")
     const [rightPanel, setRightPanel] = useState<RightPanel>("preview")
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [containerReady, setContainerReady] = useState(false)
     const [containerLogs, setContainerLogs] = useState<string[]>([])
     const [isBootingContainer, setIsBootingContainer] = useState(false)
     const [refreshKey, setRefreshKey] = useState(0)
-    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [isFullscreen] = useState(false)
 
     const chatEndRef = useRef<HTMLDivElement>(null)
     const eventSourceRef = useRef<EventSource | null>(null)
@@ -338,6 +311,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     const terminalEndRef = useRef<HTMLDivElement>(null)
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const chatInputRef = useRef<HTMLInputElement>(null)
+    const bootingTerminalEndRef = useRef<HTMLDivElement>(null)
 
     const isReady = phase === "ready"
     const isError = phase === "error"
@@ -418,8 +392,6 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
             teardownRef.current?.()
         }
     }, [jobId])
-
-    const bootingTerminalEndRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -787,140 +759,106 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     // ════════════════════════════════════════════════════
 
     return (
-        <div className="flex h-dvh w-full flex-col bg-background text-foreground overflow-hidden">
+        <div className="flex h-dvh w-full flex-col bg-[#FAFAF9] text-gray-900 overflow-hidden font-sans">
             {/* ── Top bar ─────────────────────────────────────────────── */}
-            <header className="flex h-11 shrink-0 items-center justify-between border-b border-border/30 bg-card/60 px-4 backdrop-blur-xl">
-                <div className="flex items-center gap-3">
+            <header className="flex h-12 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 relative z-20">
+                <div className="flex items-center gap-3 w-1/3 min-w-0">
                     <button
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        className="text-[13px] text-gray-400 hover:text-gray-900 transition-colors tracking-wide font-medium flex items-center gap-1 focus:outline-none"
                         onClick={onBack}
                     >
-                        ← Back
+                        &larr;
                     </button>
-                    <div className="h-3.5 w-px bg-border/50" />
-                    <div className="flex items-center gap-1.5">
-                        <div className="h-5 w-5 rounded-md bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                            <Wand2 className="h-3 w-3 text-primary" />
-                        </div>
-                        <span className="text-sm font-medium">Remix Studio</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-[14px] font-medium tracking-tight text-gray-900 truncate flex shrink-0">
+                            Studio Workspace
+                        </span>
+                        <ChevronRight className="h-3 w-3 text-gray-300 shrink-0" />
+                        <span className="text-[13px] text-gray-400 truncate">
+                            {isReady ? "Ready to edit" :
+                                isBootingContainer ? "Loading Live Preview..." : statusMessage}
+                        </span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex-1 flex justify-center">
                     {isReady && (
-                        <div className="flex items-center rounded-lg border border-border/30 p-0.5 bg-background/50">
-                            {(["preview", "code", "terminal"] as const).map((panel) => {
-                                const Icon = panel === "preview" ? Eye : panel === "code" ? Code2 : Terminal
-                                return (
-                                    <button
-                                        key={panel}
-                                        className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-all duration-150 ${rightPanel === panel ? "bg-primary/10 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                                        onClick={() => setRightPanel(panel)}
-                                    >
-                                        <Icon className="h-3 w-3" />
-                                        <span className="capitalize">{panel}</span>
-                                    </button>
-                                )
-                            })}
+                        <div className="flex items-center gap-1">
+                            <button
+                                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${rightPanel === "preview" ? "bg-gray-100 text-gray-900 shadow-sm border border-gray-200/60" : "text-gray-500 hover:text-gray-900"}`}
+                                onClick={() => setRightPanel("preview")}
+                            >
+                                <Eye className="h-4 w-4" />
+                                Preview
+                            </button>
+                            <button
+                                className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${rightPanel === "code" ? "bg-gray-100 text-gray-900 shadow-sm border border-gray-200/60" : "text-gray-400 hover:text-gray-900"}`}
+                                onClick={() => setRightPanel("code")}
+                            >
+                                <Code2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${rightPanel === "terminal" ? "bg-gray-100 text-gray-900 shadow-sm border border-gray-200/60" : "text-gray-400 hover:text-gray-900"}`}
+                                onClick={() => setRightPanel("terminal")}
+                            >
+                                <Terminal className="h-4 w-4" />
+                            </button>
+                            <div className="w-px h-4 bg-gray-200 mx-2" />
+                            <button
+                                className="flex items-center justify-center rounded-lg p-1.5 text-gray-400 hover:text-gray-900 transition-colors"
+                            >
+                                <Plus className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-3 w-1/3 shrink-0 justify-end">
+                    {isReady && rightPanel === "preview" && previewUrl && (
+                        <div className="flex items-center bg-gray-50 border border-gray-200 rounded-md px-2 py-1 mr-2 text-[12px] text-gray-500 font-mono">
+                            <Monitor className="w-3 h-3 mr-1.5 opacity-60" />
+                            <span className="truncate max-w-[120px]">{previewUrl.replace(/^https?:\/\//, '')}</span>
+                            <button className="ml-1 hover:text-gray-900 text-gray-400"><RefreshCw className="w-3 h-3 ml-2" onClick={handleRefreshPreview} /></button>
                         </div>
                     )}
 
-                    {isReady && rightPanel === "preview" && (
-                        <>
-                            <div className="flex items-center rounded-lg border border-border/30 p-0.5 bg-background/50">
-                                {([
-                                    { key: "desktop" as const, Icon: Monitor },
-                                    { key: "tablet" as const, Icon: Tablet },
-                                    { key: "mobile" as const, Icon: Smartphone },
-                                ]).map(({ key, Icon }) => (
-                                    <button
-                                        key={key}
-                                        className={`rounded-md p-1 transition-all duration-150 ${viewportSize === key ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-                                        onClick={() => setViewportSize(key)}
-                                    >
-                                        <Icon className="h-3.5 w-3.5" />
-                                    </button>
-                                ))}
-                            </div>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={handleRefreshPreview} title="Refresh">
-                                <RefreshCw className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => setIsFullscreen(!isFullscreen)} title="Fullscreen">
-                                <Maximize2 className="h-3 w-3" />
-                            </Button>
-                            {previewUrl && (
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground" onClick={() => {
-                                    navigator.clipboard.writeText(previewUrl).catch(() => { })
-                                    // Brief visual feedback
-                                    const btn = document.activeElement as HTMLButtonElement
-                                    if (btn) {
-                                        btn.title = "Copied!"
-                                        setTimeout(() => { btn.title = "Copy preview URL" }, 1500)
-                                    }
-                                }} title="Copy preview URL">
-                                    <ExternalLink className="h-3 w-3" />
-                                </Button>
-                            )}
-                        </>
-                    )}
-
+                    <button className="text-[13px] font-medium text-gray-600 hover:text-gray-900 px-2 py-1 flex items-center gap-1.5 transition-colors">
+                        Share <GlobeLock className="h-3.5 w-3.5 opacity-50" />
+                    </button>
                     {isReady && (
-                        <Button variant="outline" size="sm" className="h-7 gap-1 text-[11px] border-border/30" onClick={handleDownloadAll}>
-                            <Download className="h-3 w-3" />
-                            Export
+                        <Button size="sm" className="h-8 px-4 text-[13px] bg-[#2563eb] hover:bg-blue-700 text-white border-0 rounded-[0.4rem] font-medium transition-all shadow-sm" onClick={handleDownloadAll}>
+                            Publish
                         </Button>
                     )}
-
-                    <div className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium ${isError ? "bg-destructive/10 text-destructive" :
-                        isReady ? "bg-emerald-500/10 text-emerald-500" :
-                            "bg-primary/10 text-primary"
-                        }`}>
-                        {isError ? <AlertCircle className="h-2.5 w-2.5" /> :
-                            isReady ? <CheckCircle className="h-2.5 w-2.5" /> :
-                                <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-                        {PHASE_LABELS[phase] ?? phase}
-                    </div>
                 </div>
             </header>
 
             {/* Error banner */}
             {isError && error && (
-                <div className="border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs text-destructive flex items-center justify-between">
+                <div className="border-b border-red-200 bg-red-50 px-6 py-2 text-[13px] text-red-600 flex items-center justify-between z-20 relative font-medium">
                     <span>{error}</span>
-                    <button onClick={() => setError(null)}><X className="h-3 w-3" /></button>
+                    <button onClick={() => setError(null)} className="hover:bg-red-100 p-1 rounded-md transition-colors"><X className="h-4 w-4" /></button>
                 </div>
             )}
 
             {/* Progress bar */}
             {!isReady && !isError && (
-                <div className="h-px w-full bg-border/20">
+                <div className="h-[2px] w-full bg-blue-50/50 relative z-20">
                     <div
-                        className="h-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-700 ease-out"
+                        className="h-full bg-blue-500 transition-all duration-700 ease-out"
                         style={{ width: `${Math.max(progress * 100, 2)}%` }}
                     />
                 </div>
             )}
 
             {/* ── Main content ──────────────────────────────────────────── */}
-            <div className="flex flex-1 overflow-hidden">
-                {/* Left: Chat — hidden in fullscreen preview */}
-                {!isFullscreen && (
-                    <div className="flex w-[360px] shrink-0 flex-col border-r border-border/30 bg-card/20">
-                        <ScrollArea className="flex-1 p-4">
-                            <div className="space-y-4">
-                                {/* Generation progress */}
-                                {!isReady && !isError && (
-                                    <div className="flex gap-2.5">
-                                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/10">
-                                            <Bot className="h-3.5 w-3.5 text-primary" />
-                                        </div>
-                                        <div className="rounded-xl bg-muted/20 border border-border/20 px-4 py-2.5 text-xs text-muted-foreground">
-                                            <Loader2 className="h-3 w-3 animate-spin inline mr-1.5" />
-                                            {statusMessage}
-                                        </div>
-                                    </div>
-                                )}
+            <div className="flex flex-1 overflow-hidden relative">
 
+                {/* Left: Chat */}
+                {!isFullscreen && (
+                    <div className="flex w-[380px] shrink-0 flex-col bg-[#FAFAF9] relative z-10 border-r border-gray-200">
+                        <ScrollArea className="flex-1 p-5 pb-0">
+                            <div className="space-y-6 pb-6">
                                 {/* Welcome state */}
                                 {isReady && messages.length === 0 && (
                                     <WelcomeState
@@ -930,81 +868,58 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                                     />
                                 )}
 
-                                {/* WebContainer booting chip */}
-                                {isBootingContainer && (
-                                    <div className="flex gap-2.5">
-                                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/10">
-                                            <Play className="h-3.5 w-3.5 text-amber-500" />
-                                        </div>
-                                        <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 px-4 py-2.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                            Booting preview environment…
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Chat messages */}
                                 {messages.map((msg, msgIdx) => (
                                     <div
                                         key={msg.id}
-                                        className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+                                        className={`flex flex-col gap-1 w-full relative z-0 ${msg.role === "user" ? "items-end" : "items-start"}`}
                                         style={{ animationDelay: `${msgIdx * 30}ms` }}
                                     >
-                                        {/* Avatar */}
-                                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${msg.role === "user"
-                                            ? "bg-foreground/8 ring-1 ring-foreground/5"
-                                            : "bg-gradient-to-br from-primary/20 to-primary/5 ring-1 ring-primary/10"
+                                        {/* Message bubble */}
+                                        <div className={`w-fit max-w-[90%] px-1 ${msg.role === "user"
+                                            ? "bg-gray-100/80 px-4 py-3 rounded-2xl rounded-tr-sm text-gray-900 text-[14px]"
+                                            : "text-gray-800"
                                             }`}>
-                                            {msg.role === "user" ? (
-                                                <User className="h-3.5 w-3.5 text-foreground/60" />
+                                            {/* User images */}
+                                            {msg.images && msg.images.length > 0 && (
+                                                <div className="flex gap-2 mb-3 flex-wrap">
+                                                    {msg.images.map((img, i) => (
+                                                        <img
+                                                            key={i}
+                                                            src={img.preview}
+                                                            alt={img.name}
+                                                            className="h-16 w-16 rounded-lg object-cover border border-gray-200 shadow-sm"
+                                                        />
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {/* Tool cards */}
+                                            {msg.toolExecutions && msg.toolExecutions.length > 0 && (
+                                                <div className="mb-4 space-y-2 mt-2">
+                                                    <div className="flex items-center gap-2 text-[12px] font-medium text-gray-500 mb-1 px-1">
+                                                        <FileCode2 className="w-3.5 h-3.5" />
+                                                        <span>{msg.toolExecutions.length} edit{msg.toolExecutions.length !== 1 ? 's' : ''} applied</span>
+                                                    </div>
+                                                    {msg.toolExecutions.map((exec, i) => (
+                                                        <ToolExecutionCard key={i} exec={exec} />
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {/* Message content */}
+                                            {msg.role === "assistant" && msg.content ? (
+                                                <MarkdownContent content={msg.content} />
                                             ) : (
-                                                <Bot className="h-3.5 w-3.5 text-primary" />
+                                                <span className="text-[14px] leading-relaxed block whitespace-pre-wrap">{msg.content}</span>
+                                            )}
+                                            {msg.status === "streaming" && (
+                                                <span className="inline-block w-1.5 h-3.5 bg-gray-400 animate-pulse ml-1 align-middle" />
                                             )}
                                         </div>
-
-                                        {/* Message bubble */}
-                                        <div className="flex flex-col gap-0.5 max-w-[280px]">
-                                            <div className={`rounded-xl px-3.5 py-2.5 ${msg.role === "user"
-                                                ? "bg-primary/10 border border-primary/10 text-foreground text-[13px]"
-                                                : "bg-muted/15 border border-border/15 text-foreground/85"
-                                                }`}>
-                                                {/* User images */}
-                                                {msg.images && msg.images.length > 0 && (
-                                                    <div className="flex gap-1.5 mb-2 flex-wrap">
-                                                        {msg.images.map((img, i) => (
-                                                            <img
-                                                                key={i}
-                                                                src={img.preview}
-                                                                alt={img.name}
-                                                                className="h-16 w-16 rounded-lg object-cover border border-border/20"
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {/* Tool cards */}
-                                                {msg.toolExecutions && msg.toolExecutions.length > 0 && (
-                                                    <div className="mb-2">
-                                                        {msg.toolExecutions.map((exec, i) => (
-                                                            <ToolExecutionCard key={i} exec={exec} />
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {/* Message content */}
-                                                {msg.role === "assistant" && msg.content ? (
-                                                    <MarkdownContent content={msg.content} />
-                                                ) : (
-                                                    <span className="text-[13px] leading-relaxed">{msg.content}</span>
-                                                )}
-                                                {msg.status === "streaming" && (
-                                                    <span className="inline-block w-0.5 h-4 bg-primary/60 animate-pulse ml-0.5 rounded-full align-text-bottom" />
-                                                )}
-                                            </div>
-                                            {/* Timestamp */}
-                                            <span className={`text-[9px] text-muted-foreground/40 px-1 ${msg.role === "user" ? "text-right" : ""}`}>
-                                                {msg.status === "done" && <Clock className="inline h-2 w-2 mr-0.5 align-[-1px]" />}
-                                                {relativeTime(msg.timestamp)}
-                                            </span>
-                                        </div>
+                                        {/* Timestamp */}
+                                        <span className="text-[10px] text-gray-400 px-2 font-medium tracking-wide">
+                                            {msg.status === "done" && msg.role !== 'assistant' && <Check className="inline h-3 w-3 mr-0.5 text-gray-300" />}
+                                            {relativeTime(msg.timestamp)}
+                                        </span>
                                     </div>
                                 ))}
 
@@ -1015,7 +930,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
 
                         {/* ── Chat input ──────────────────────────────────── */}
                         <div
-                            className="border-t border-border/30 p-3 bg-background/50 backdrop-blur-sm"
+                            className="bg-[#FAFAF9]"
                             onDrop={handleDrop}
                             onDragOver={(e) => e.preventDefault()}
                         >
@@ -1031,188 +946,136 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                                 }}
                             />
 
-                            {attachedImages.length > 0 && (
-                                <div className="mb-2 flex gap-1.5 flex-wrap">
-                                    {attachedImages.map((img, i) => (
-                                        <div key={i} className="relative group">
-                                            <img src={img.preview} alt={img.name} className="h-11 w-11 rounded-lg object-cover border border-border/30" />
-                                            <button
-                                                className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => removeImage(i)}
-                                            >
-                                                <X className="h-2.5 w-2.5" />
+                            {/* Pinned Input Container */}
+                            <div className="mx-4 mb-4 mt-2 bg-white rounded-3xl p-1.5 border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] focus-within:shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-all">
+                                {attachedImages.length > 0 && (
+                                    <div className="p-2 pb-1 flex gap-2 flex-wrap">
+                                        {attachedImages.map((img, i) => (
+                                            <div key={i} className="relative group">
+                                                <img src={img.preview} alt={img.name} className="h-10 w-10 rounded-lg object-cover border border-gray-200 shadow-sm" />
+                                                <button
+                                                    className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100 shadow-md"
+                                                    onClick={() => removeImage(i)}
+                                                >
+                                                    <X className="h-2.5 w-2.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex flex-col gap-1 w-full py-1">
+                                    <input
+                                        ref={chatInputRef}
+                                        className="w-full bg-transparent border-none text-[14px] py-1.5 px-3 text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                                        placeholder={isReady ? "Ask Workspace..." : "Waiting..."}
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        onPaste={handlePaste}
+                                        disabled={!isReady || isStreaming}
+                                    />
+
+                                    <div className="flex items-center justify-between px-2 pt-1">
+                                        <div className="flex gap-1.5">
+                                            <button className="flex items-center justify-center p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors font-medium">
+                                                <Plus className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+                                                <Sparkles className="w-3 h-3" />
+                                                Visual edits
                                             </button>
                                         </div>
-                                    ))}
-                                    {attachedImages.length < 5 && (
-                                        <button
-                                            className="h-11 w-11 rounded-lg border border-dashed border-border/30 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
-                                            onClick={() => fileInputRef.current?.click()}
-                                        >
-                                            <ImagePlus className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
+                                        <div className="flex gap-1.5">
+                                            <button className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors">
+                                                <MessageSquare className="w-3 h-3" />
+                                                Chat
+                                            </button>
+                                            {isStreaming ? (
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-7 w-7 rounded-full bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all"
+                                                    onClick={handleStop}
+                                                >
+                                                    <Square className="h-3 w-3 fill-current" />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className={`h-7 w-7 rounded-full bg-black text-white hover:bg-gray-800 transition-all disabled:opacity-20`}
+                                                    disabled={!isReady || !chatInput.trim()}
+                                                    onClick={handleSendMessage}
+                                                >
+                                                    <ArrowUp className="w-3.5 h-3.5" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                            )}
-
-                            <div className="flex gap-1.5 items-center rounded-xl border border-border/30 bg-background/80 px-1 focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/10 transition-all">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 shrink-0 text-muted-foreground/50 hover:text-foreground rounded-lg"
-                                    disabled={!isReady}
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <Paperclip className="h-3.5 w-3.5" />
-                                </Button>
-                                <input
-                                    ref={chatInputRef}
-                                    className="flex-1 bg-transparent border-0 text-[13px] py-2 placeholder:text-muted-foreground/40 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                                    placeholder={isReady ? "Chat or describe changes…" : "Waiting for generation…"}
-                                    value={chatInput}
-                                    onChange={(e) => setChatInput(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    onPaste={handlePaste}
-                                    disabled={!isReady || isStreaming}
-                                />
-                                {isStreaming ? (
-                                    <Button
-                                        size="icon"
-                                        variant="destructive"
-                                        className="h-7 w-7 shrink-0 rounded-lg"
-                                        onClick={handleStop}
-                                    >
-                                        <Square className="h-3 w-3" />
-                                    </Button>
-                                ) : (
-                                    <Button
-                                        size="icon"
-                                        className="h-7 w-7 shrink-0 rounded-lg"
-                                        disabled={!isReady || !chatInput.trim()}
-                                        onClick={handleSendMessage}
-                                    >
-                                        <Send className="h-3 w-3" />
-                                    </Button>
-                                )}
                             </div>
                         </div>
                     </div>
                 )}
 
                 {/* ── Right panel ────────────────────────────────────── */}
-                <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex flex-1 flex-col overflow-hidden relative z-10 bg-[#F5F5F5]">
                     {rightPanel === "preview" && (
-                        <div className="flex-1 flex flex-col overflow-hidden bg-[#0a0a0a]">
-                            {/* Preview URL bar */}
-                            {previewUrl && (
-                                <div className="flex items-center gap-2 h-8 px-3 border-b border-border/20 bg-[#111]">
-                                    <div className="flex gap-1">
-                                        <div className="w-2 h-2 rounded-full bg-red-500/60" />
-                                        <div className="w-2 h-2 rounded-full bg-yellow-500/60" />
-                                        <div className="w-2 h-2 rounded-full bg-green-500/60" />
-                                    </div>
-                                    <div className="flex-1 bg-[#1a1a1a] rounded-md px-3 py-0.5 text-[10px] text-muted-foreground/60 font-mono truncate border border-border/10">
-                                        {previewUrl}
-                                    </div>
+                        <div className="flex-1 flex items-center justify-center overflow-auto p-8 lg:p-12 h-full relative">
+                            {previewUrl ? (
+                                <div
+                                    className="h-full max-h-[900px] transition-all duration-300 ease-in-out bg-white rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.06),0_2px_4px_rgba(0,0,0,0.02)] overflow-hidden border border-gray-200/60 ring-1 ring-gray-900/5"
+                                    style={{ width: viewportWidths[viewportSize] }}
+                                >
+                                    <iframe
+                                        key={refreshKey}
+                                        src={previewUrl}
+                                        className="h-full w-full border-0"
+                                        title="Remix Preview"
+                                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads align-top bg-white"
+                                    />
+                                </div>
+                            ) : isBootingContainer ? (
+                                <div className="bg-white rounded-full px-5 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.04)] border border-gray-100 flex items-center gap-3">
+                                    <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+                                    <span className="text-[13px] font-medium text-gray-600">Getting ready...</span>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-full px-5 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.04)] border border-gray-100 flex items-center gap-3">
+                                    <Wand2 className="h-4 w-4 text-gray-400" />
+                                    <span className="text-[13px] font-medium text-gray-600">Crafting your site...</span>
                                 </div>
                             )}
-                            <div className="flex-1 flex items-center justify-center overflow-hidden">
-                                {previewUrl ? (
-                                    <div
-                                        className="h-full transition-all duration-300 ease-out bg-white"
-                                        style={{ width: viewportWidths[viewportSize] }}
-                                    >
-                                        <iframe
-                                            key={refreshKey}
-                                            src={previewUrl}
-                                            className="h-full w-full border-0"
-                                            title="Remix Preview"
-                                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
-                                        />
-                                    </div>
-                                ) : isBootingContainer ? (
-                                    <div className="h-full w-full flex flex-col bg-[#1e1e1e] border-0 text-[#cccccc] font-mono text-sm leading-relaxed">
-                                        <div className="flex items-center space-x-3 p-4 border-b border-[#333333] bg-[#252526]">
-                                            <Loader2 className="h-4 w-4 text-emerald-400 animate-spin" />
-                                            <span className="font-semibold text-emerald-400 tracking-wide">Booting Environment & Installing Dependencies</span>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto p-4 space-y-1.5 scrollbar-thin scrollbar-thumb-[#444444] scrollbar-track-transparent">
-                                            {containerLogs.map((log, i) => {
-                                                let badge = "info"
-                                                let msg = log
-                                                let color = "text-sky-400/90"
-                                                const match = log.match(/^\[(.*?)\]\s(.*)/)
-                                                if (match) {
-                                                    badge = match[1]
-                                                    msg = match[2]
-                                                    if (badge === "install-output" || badge === "terminal") {
-                                                        badge = "terminal"
-                                                        color = "text-gray-400"
-                                                    } else if (badge === "error") {
-                                                        color = "text-rose-400"
-                                                    } else if (badge === "mount" || badge === "cache-hit" || badge === "snapshot-save") {
-                                                        color = "text-emerald-400"
-                                                    } else if (badge === "install" || badge === "dev-start") {
-                                                        color = "text-purple-400"
-                                                    }
-                                                }
-
-                                                return (
-                                                    <div key={i} className="flex space-x-3 items-start">
-                                                        <span className={`px-1.5 py-0.5 rounded shadow-sm bg-[#2a2a2a] text-[10px] uppercase font-bold tracking-wider shrink-0 mt-0.5 ${color}`}>
-                                                            {badge}
-                                                        </span>
-                                                        <span className={`break-words whitespace-pre-wrap ${badge === 'terminal' ? 'text-gray-400' : 'text-gray-200'}`}>{msg}</span>
-                                                    </div>
-                                                )
-                                            })}
-                                            <div ref={bootingTerminalEndRef} className="h-4" />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center gap-3 text-center">
-                                        {!isReady ? (
-                                            <>
-                                                <Wand2 className="h-8 w-8 text-muted-foreground/20" />
-                                                <p className="text-sm text-muted-foreground/60">Preview appears after code generation</p>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Eye className="h-8 w-8 text-muted-foreground/20" />
-                                                <p className="text-sm text-muted-foreground/60">Loading preview…</p>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
                         </div>
                     )}
 
                     {rightPanel === "code" && (
-                        <CodeEditor
-                            files={files}
-                            selectedFile={selectedFile}
-                            onSelectFile={setSelectedFile}
-                            onFileChange={handleFileEdit}
-                        />
+                        <div className="flex-1 bg-white border border-gray-200 m-4 rounded-xl shadow-sm overflow-hidden">
+                            <CodeEditor
+                                files={files}
+                                selectedFile={selectedFile}
+                                onSelectFile={setSelectedFile}
+                                onFileChange={handleFileEdit}
+                            />
+                        </div>
                     )}
 
                     {rightPanel === "terminal" && (
-                        <div className="flex-1 overflow-auto bg-[#0a0a0a] p-4 font-mono text-[11px]">
+                        <div className="flex-1 overflow-auto bg-gray-900 m-4 rounded-xl p-5 font-mono text-[12px] leading-relaxed shadow-inner">
                             {containerLogs.length === 0 ? (
-                                <p className="text-white/15">Terminal output appears when WebContainer boots…</p>
+                                <p className="text-gray-500 italic">Terminal output appears when WebContainer boots…</p>
                             ) : (
-                                containerLogs.map((log, i) => (
-                                    <div
-                                        key={i}
-                                        className={`leading-5 ${log.includes("[error]") ? "text-red-400" :
-                                            log.includes("[server-ready]") ? "text-emerald-400" :
-                                                "text-white/50"
-                                            }`}
-                                    >
-                                        {log}
-                                    </div>
-                                ))
+                                containerLogs.map((log, i) => {
+                                    let color = "text-gray-400"
+                                    if (log.includes("[error]")) color = "text-red-400"
+                                    else if (log.includes("[server-ready]")) color = "text-emerald-400"
+                                    else if (log.includes("[install]")) color = "text-blue-400"
+                                    else color = "text-gray-300"
+                                    return (
+                                        <div key={i} className={`font-mono ${color}`}>{log}</div>
+                                    )
+                                })
                             )}
                             <div ref={terminalEndRef} />
                         </div>

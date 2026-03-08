@@ -310,6 +310,13 @@ export async function mountAndRunWithSnapshot(
             await wc.mount(cachedSnapshot)
             onEvent({ type: "mount", message: "Snapshot restored" })
 
+            // FIX: Restore execute permissions lost during IndexedDB snapshot serialization
+            try {
+                await wc.spawn("chmod", ["+x", "node_modules/.bin/vite"])
+                await wc.spawn("chmod", ["+x", "node_modules/vite/bin/vite.js"])
+            } catch (e) {
+                console.warn("Could not chmod vite binary", e)
+            }
 
             // Overwrite with latest source files
             const sourceFiles = files.filter((f) => !f.path.startsWith("node_modules"))
