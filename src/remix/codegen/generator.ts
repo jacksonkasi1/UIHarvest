@@ -7,7 +7,8 @@ import type { RemixSpec, GeneratedFile } from "../types.js";
 import { GeminiClient } from "../../gemini-client.js";
 
 // ** import apis
-import { buildSystemPrompt, buildPagePrompt, buildIterationPrompt } from "./system-prompt.js";
+// ** import apis
+import { buildSystemPrompt, buildPagePrompt, buildIterationPrompt, buildPlannerPrompt } from "./system-prompt.js";
 import { generateScaffold } from "./scaffold.js";
 import { parseGeneratedFiles, mergeFiles } from "./parser.js";
 
@@ -52,7 +53,7 @@ export class RemixCodeGenerator {
             const pagePrompt = buildPagePrompt(this.spec, i);
             const response = await this.ai.chat(pagePrompt, this.systemPrompt, {
                 model: "codegen",
-                maxOutputTokens: 8192,
+                maxOutputTokens: 65536,
                 temperature: 0.5,
             });
 
@@ -66,52 +67,108 @@ export class RemixCodeGenerator {
         return this.files;
     }
 
+    private chunkArray<T>(array: T[], size: number): T[][] {
+        const chunked = [];
+        for (let i = 0; i < array.length; i += size) {
+            chunked.push(array.slice(i, i + size));
+        }
+        return chunked;
+    }
+
     /**
-     * Iterate on the generated code with a user prompt.
+     * Iterate on the generated code with a user prompt via Planner + Execution loops.
      */
     async iterate(
         userPrompt: string,
         onProgress?: (message: string) => void,
         images?: Array<{ data: string; mimeType: string }>
     ): Promise<GeneratedFile[]> {
-        onProgress?.("Processing your request...");
+        // ─── PHASE 1: PLANNING ─────────────────────────────
+        onProgress?.("Architecting the changes (Planning Phase)...");
 
-        const iteratePrompt = buildIterationPrompt(
-            this.spec,
-            userPrompt,
-            this.files
-        );
-
-        let response: string;
+        const plannerPrompt = buildPlannerPrompt(this.spec, userPrompt, this.files);
+        let planJsonRaw: string;
 
         if (images && images.length > 0) {
-            // Multimodal: send images + text to Gemini
-            onProgress?.(`Analyzing ${images.length} image(s) and generating changes...`);
-            response = await this.ai.chatWithImages(
-                iteratePrompt,
+            planJsonRaw = await this.ai.chatWithImages(
+                plannerPrompt,
                 images,
                 this.systemPrompt,
-                {
-                    model: "codegen",
-                    maxOutputTokens: 8192,
-                    temperature: 0.4,
-                }
+                { model: "analysis", maxOutputTokens: 4000, temperature: 0.2 }
             );
         } else {
-            // Text-only iteration
-            response = await this.ai.chat(iteratePrompt, this.systemPrompt, {
-                model: "codegen",
-                maxOutputTokens: 8192,
-                temperature: 0.4,
+            planJsonRaw = await this.ai.chat(plannerPrompt, this.systemPrompt, {
+                model: "analysis",
+                maxOutputTokens: 4000,
+                temperature: 0.2,
             });
         }
 
-        if (response) {
-            const updates = parseGeneratedFiles(response);
-            this.files = mergeFiles(this.files, updates);
-            onProgress?.(`Updated ${updates.length} file(s)`);
+        // Parse Plan JSON
+        let plannedFiles: Array<{ file: string; action: string; reason: string }> = [];
+        try {
+            plannedFiles = this.ai.parseJson(planJsonRaw);
+        } catch (err) {
+            console.error("Failed to parse architect plan, falling back to full-prompt approach:", err);
+            // Fallback object for safety
+            plannedFiles = [{ file: "src/App.tsx", action: "update", reason: "Fallback catch-all" }];
         }
 
+        if (!Array.isArray(plannedFiles)) plannedFiles = [];
+
+        const filesToEdit = plannedFiles.map(p => p.file);
+        const uniqueFilesToEdit = [...new Set(filesToEdit)];
+
+        onProgress?.(`Planned edits for ${uniqueFilesToEdit.length} files. Starting execution...`);
+
+        // ─── PHASE 2: EXECUTION ────────────────────────────
+        // chunk the files to prevent 65k token explosion
+        const chunks = this.chunkArray(uniqueFilesToEdit, 20);
+
+        let batchIndex = 1;
+        for (const batch of chunks) {
+            onProgress?.(`Applying edits (Batch ${batchIndex} of ${chunks.length})...`);
+
+            // Build subset context: Only give the agent existing code for the 4 files it's currently editing, 
+            // plus maybe 1 core file like App.tsx if it's missing, to save input tokens.
+            const existingCodeSubset = this.files.filter((f) => batch.includes(f.path));
+
+            // Inform the LLM that it should only generate this specific batch of files.
+            const focusedUserPrompt = `${userPrompt}\n\n[SYSTEM DIRECTIVE]: You are in phase ${batchIndex} of ${chunks.length}. You MUST generate the full updated file contents ONLY for these exact files: ${batch.join(", ")}. Do not output any other files.`;
+
+            const iteratePrompt = buildIterationPrompt(
+                this.spec,
+                focusedUserPrompt,
+                existingCodeSubset
+            );
+
+            let response: string;
+
+            // Re-feed images if provided, since we might be building visual components here.
+            if (images && images.length > 0) {
+                response = await this.ai.chatWithImages(
+                    iteratePrompt,
+                    images,
+                    this.systemPrompt,
+                    { model: "codegen", maxOutputTokens: 65536, temperature: 0.4 }
+                );
+            } else {
+                response = await this.ai.chat(iteratePrompt, this.systemPrompt, {
+                    model: "codegen",
+                    maxOutputTokens: 65536,
+                    temperature: 0.4,
+                });
+            }
+
+            if (response) {
+                const updates = parseGeneratedFiles(response);
+                this.files = mergeFiles(this.files, updates);
+                onProgress?.(`Merged ${updates.length} files from Batch ${batchIndex}`);
+            }
+            batchIndex++;
+        }
+
+        onProgress?.(`Iteration complete. Updated ${uniqueFilesToEdit.length} files successfully.`);
         return this.files;
     }
 

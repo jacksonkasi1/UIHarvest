@@ -76,6 +76,12 @@ export class RemixManager {
         };
 
         this.jobs.set(id, job);
+
+        // Save immediately to Firestore so it shows up on the Recent Projects dashboard
+        jobStore.save(job).catch(err => {
+            console.error(`[RemixManager] Failed to persist initial job ${id}:`, err.message);
+        });
+
         this.runJob(job);
         return job;
     }

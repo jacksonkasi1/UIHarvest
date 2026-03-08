@@ -42,9 +42,9 @@ export class GeminiClient {
     }
     this.ai = new GoogleGenAI({ apiKey });
     this.models = {
-      vision: process.env.GEMINI_MODEL_VISION || "gemini-3.1-flash-lite-preview",
-      analysis: process.env.GEMINI_MODEL_ANALYSIS || "gemini-3.1-flash-lite-preview",
-      codegen: process.env.GEMINI_MODEL_CODEGEN || "gemini-3.1-flash-lite-preview",
+      vision: process.env.GEMINI_MODEL_VISION || "gemini-3.1-pro-preview",
+      analysis: process.env.GEMINI_MODEL_ANALYSIS || "gemini-3.1-pro-preview",
+      codegen: process.env.GEMINI_MODEL_CODEGEN || "gemini-3.1-pro-preview",
     };
   }
 
@@ -77,7 +77,7 @@ export class GeminiClient {
     ];
 
     const config: Record<string, any> = {
-      maxOutputTokens: options.maxOutputTokens ?? 8192,
+      maxOutputTokens: options.maxOutputTokens ?? 65536,
       temperature: options.temperature ?? 0.4,
       topP: 0.95,
       safetySettings,
@@ -98,6 +98,7 @@ export class GeminiClient {
     config: Record<string, any>,
     maxRetries = 3
   ): Promise<string> {
+    console.log(`[GeminiClient] Making call using model: ${modelId}`);
     let lastErr: Error | null = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -155,6 +156,38 @@ export class GeminiClient {
     return this.parseJson<T>(raw);
   }
 
+  /**
+   * Chat with text + optional images (multimodal).
+   * Images are base64-encoded with mimeType.
+   */
+  async chatWithImages(
+    prompt: string,
+    images: Array<{ data: string; mimeType: string }>,
+    systemPrompt?: string,
+    options: GeminiCallOptions = {}
+  ): Promise<string> {
+    if (!this.isAvailable) throw new Error("No GOOGLE_CLOUD_API_KEY");
+
+    const modelId = this.resolveModel(options.model);
+    const config = this.buildConfig(options);
+
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+    // Add images first
+    for (const img of images) {
+      parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+    }
+
+    // Add text prompt
+    const textContent = systemPrompt
+      ? `SYSTEM: ${systemPrompt}\n\n---\n\n${prompt}`
+      : prompt;
+    parts.push({ text: textContent });
+
+    const contents: GeminiMessage[] = [{ role: "user", parts }];
+    return this.callWithRetry(modelId, contents, config);
+  }
+
   // ─── Vision (image + text) ──────────────────────────────────────────────────
 
   async analyzeImage(
@@ -193,9 +226,93 @@ export class GeminiClient {
     return this.parseJson<T>(raw);
   }
 
+  // ─── Streaming chat ─────────────────────────────────────────────────────────
+
+  /**
+   * Stream chat response token-by-token.
+   * Yields text chunks as they arrive from Gemini.
+   */
+  async *chatStream(
+    prompt: string,
+    systemPrompt?: string,
+    options: GeminiCallOptions = {}
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this.isAvailable) throw new Error("No GOOGLE_CLOUD_API_KEY");
+
+    const modelId = this.resolveModel(options.model);
+    const config = this.buildConfig(options);
+
+    const contents: GeminiMessage[] = [];
+    if (systemPrompt) {
+      contents.push({ role: "user", parts: [{ text: `SYSTEM: ${systemPrompt}\n\n---\n\n${prompt}` }] });
+    } else {
+      contents.push({ role: "user", parts: [{ text: prompt }] });
+    }
+
+    console.log(`[GeminiClient] Streaming chat using model: ${modelId}`);
+
+    const response = await this.ai.models.generateContentStream({
+      model: modelId,
+      contents,
+      config,
+    });
+
+    this.callCount++;
+    for await (const chunk of response) {
+      const text = chunk.text;
+      if (text) {
+        yield text;
+      }
+    }
+  }
+
+  /**
+   * Stream chat response with images (multimodal) token-by-token.
+   */
+  async *chatStreamWithImages(
+    prompt: string,
+    images: Array<{ data: string; mimeType: string }>,
+    systemPrompt?: string,
+    options: GeminiCallOptions = {}
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this.isAvailable) throw new Error("No GOOGLE_CLOUD_API_KEY");
+
+    const modelId = this.resolveModel(options.model);
+    const config = this.buildConfig(options);
+
+    const parts: GeminiMessage["parts"] = [];
+
+    for (const img of images) {
+      parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+    }
+
+    const textContent = systemPrompt
+      ? `SYSTEM: ${systemPrompt}\n\n---\n\n${prompt}`
+      : prompt;
+    parts.push({ text: textContent });
+
+    const contents: GeminiMessage[] = [{ role: "user", parts }];
+
+    console.log(`[GeminiClient] Streaming multimodal chat using model: ${modelId}`);
+
+    const response = await this.ai.models.generateContentStream({
+      model: modelId,
+      contents,
+      config,
+    });
+
+    this.callCount++;
+    for await (const chunk of response) {
+      const text = chunk.text;
+      if (text) {
+        yield text;
+      }
+    }
+  }
+
   // ─── JSON parsing helper ────────────────────────────────────────────────────
 
-  private parseJson<T>(raw: string): T {
+  parseJson<T>(raw: string): T {
     // Strip markdown code fences if model wraps output
     const cleaned = raw
       .replace(/^```json\s*/i, "")
@@ -212,7 +329,7 @@ export class GeminiClient {
       if (match) {
         try {
           return JSON.parse(match[0]);
-        } catch {}
+        } catch { }
       }
       throw new Error(`Failed to parse Gemini JSON response: ${raw.slice(0, 300)}`);
     }

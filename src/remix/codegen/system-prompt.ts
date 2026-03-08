@@ -146,10 +146,8 @@ ${fileContents}
 ## CRITICAL EDIT RULES — VIOLATION = FAILURE
 
 ### SURGICAL PRECISION
-- Think of yourself as a surgeon making a precise incision, NOT a construction worker demolishing a wall.
-- Change ONLY what is explicitly requested. 99% of the original code should remain UNTOUCHED.
-- If user says "change background to green", change ONLY the background class — nothing else.
-- If user says "update the header", edit ONLY the Header component. Do NOT touch Footer, Hero, or any other components.
+- Think of yourself as a surgeon making a precise incision.
+- Change ONLY what is explicitly requested. 
 
 ### MANDATORY THOUGHT PROCESS (Execute Internally)
 1. **Understand Intent:** What is the user's core goal? Adding feature, fixing bug, changing style?
@@ -157,11 +155,6 @@ ${fileContents}
 3. **Plan Changes:** What is the MINIMAL set of changes required?
 4. **Verify Preservation:** What existing code, props, state, logic must NOT be touched?
 5. **Generate Final Code:** Only after completing all steps above.
-
-### FILE COUNT LIMITS
-- Simple style/text change = 1 file ONLY
-- New component = 2 files MAX (component + parent that imports it)
-- If you're generating >3 files, YOU'RE DOING TOO MUCH
 
 ### COMPLETENESS
 - Each file output must be COMPLETE from first line to last line
@@ -179,5 +172,50 @@ ${fileContents}
 
 ### OUTPUT FORMAT
 Follow the same format: \`\`\`tsx file="path/to/file.tsx"\`\`\`
-Only output files that need to CHANGE. Keep the existing design system and brand identity.`;
+Only output files that need to CHANGE. You are executing a batch of updates. Generate the full updated file contents for the requested files.`;
+}
+
+/**
+ * Build a planner prompt that instructs the LLM to output a JSON array of files to create/update.
+ */
+export function buildPlannerPrompt(
+    spec: RemixSpec,
+    userPrompt: string,
+    existingFiles: { path: string; content: string }[]
+): string {
+    const fileList = existingFiles
+        .map((f) => `- \`${f.path}\``)
+        .join("\n");
+
+    return `The user wants to modify the existing "${spec.brand.name}" website.
+
+## User Request
+${userPrompt}
+
+## ALL PROJECT FILES
+${fileList}
+
+## PLANNING PHASE
+You must act as the lead architect. Your job is to plan exactly which files need to be created, modified, or deleted to fulfill the user's request. 
+You are NOT generating the full code now. You are ONLY generating a JSON plan.
+
+### JSON OUTPUT FORMAT
+Output ONLY a valid JSON array of objects. Do not include markdown formatting or thoughts outside the JSON array.
+
+[
+  {
+    "file": "src/components/MyNewComponent.tsx",
+    "action": "create",
+    "reason": "Need a new component for the hero section."
+  },
+  {
+    "file": "src/App.tsx",
+    "action": "update",
+    "reason": "Import and use the new hero component."
+  }
+]
+
+Allowed actions: "create", "update".
+Be comprehensive. If adding a new feature, make sure to plan the component file and the layout/page file that imports it. 
+CRITICAL: Output ONLY valid JSON array.`;
 }

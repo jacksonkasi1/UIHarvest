@@ -155,7 +155,7 @@ async function classifyIntent(ai: GeminiClient, message: string): Promise<Intent
 }
 
 function classifyByKeywords(message: string): Intent {
-    const codeKeywords = /\b(change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet)\b/i;
+    const codeKeywords = /\b(build|create|change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet|copy|replicate)\b/i;
     return codeKeywords.test(message) ? "code_change" : "conversation";
 }
 
@@ -240,8 +240,14 @@ export async function handleChatMessage(
             return;
         }
 
-        console.log(`[chat] Classifying intent for: "${userPrompt.slice(0, 50)}..."`);
-        const intent = await classifyIntent(ai, userPrompt);
+        let intent: Intent;
+        if (images && images.length > 0) {
+            // Strong heuristic: if user attaches an image, they almost always want a code change (e.g. "build this", "fix this bug")
+            intent = "code_change";
+        } else {
+            console.log(`[chat] Classifying intent for: "${userPrompt.slice(0, 50)}..."`);
+            intent = await classifyIntent(ai, userPrompt);
+        }
         console.log(`[chat] Intent: ${intent}`);
 
         if (signal.aborted) {
@@ -391,33 +397,29 @@ async function handleCodeChange(
             enhancedPrompt = `## Recent Conversation History\n${conversationCtx}\n\n## Current Request\n${userPrompt}`;
         }
 
-        const iteratePrompt = buildIterationPrompt(
-            deps.spec,
+        // We import the Code Generator engine to leverage the new multi-turn planning loop
+        const { RemixCodeGenerator } = await import("./codegen/generator.js");
+        const generator = new RemixCodeGenerator(deps.spec, deps.files);
+
+        // Run the agentic loop, passing down a progress callback so the UI knows what phase we are in
+        const newFiles = await generator.iterate(
             enhancedPrompt,
-            deps.files
+            (msg: string) => {
+                sendSSE(res, {
+                    type: "tool_start",
+                    tool: "code_edit",
+                    message: msg,
+                });
+            },
+            images
         );
-
-        let response: string;
-
-        if (images && images.length > 0) {
-            response = await ai.chatWithImages(
-                iteratePrompt,
-                images,
-                deps.codegenSystemPrompt,
-                { model: "codegen", maxOutputTokens: 8192, temperature: 0.4 }
-            );
-        } else {
-            response = await ai.chat(iteratePrompt, deps.codegenSystemPrompt, {
-                model: "codegen",
-                maxOutputTokens: 8192,
-                temperature: 0.4,
-            });
-        }
 
         if (signal.aborted) return;
 
-        // Parse files from the response
-        const updates = parseGeneratedFiles(response);
+        // Check which files were actually updated by comparing lengths/content (approximate)
+        // generator.iterate modifies this.files directly.
+        const originalMap = new Map(deps.files.map(f => [f.path, f.content]));
+        const updates = newFiles.filter(f => originalMap.get(f.path) !== f.content);
 
         if (updates.length === 0) {
             console.warn("[chat] Code generation returned 0 file updates");
@@ -434,8 +436,6 @@ async function handleCodeChange(
             });
             return;
         }
-
-        const newFiles = mergeFiles(deps.files, updates);
 
         // Detect packages from generated code
         const allCode = updates.map(f => f.content).join("\n");
@@ -477,12 +477,13 @@ async function handleCodeChange(
 
 Files changed: ${changedPaths.join(", ")}
 
-Write a brief, friendly 1-3 sentence summary explaining what you changed and why. Use markdown. Be specific about the visual/functional changes, don't just list files.`;
+Write a brief, friendly 1-3 sentence summary explaining what you changed and why. Use markdown. Be specific about the visual/functional changes, don't just list files.
+CRITICAL RULE: DO NOT write any code blocks. DO NOT output file contents. ONLY output a natural language summary.`;
 
         try {
             const explainStream = ai.chatStream(
                 explainPrompt,
-                "You are a friendly frontend assistant. Write brief, clear summaries of code changes. Use markdown formatting.",
+                "You are a friendly frontend assistant. Write brief, clear summaries of code changes. CRITICAL: NEVER output code blocks or file contents. ONLY write conversational explanations.",
                 { model: "analysis", maxOutputTokens: 512, temperature: 0.5 }
             );
 
@@ -501,7 +502,7 @@ Write a brief, friendly 1-3 sentence summary explaining what you changed and why
                 // Fallback explanation
                 const explainResponse = await ai.chat(
                     explainPrompt,
-                    "You are a friendly frontend assistant. Write brief summaries.",
+                    "You are a friendly frontend assistant. Write brief summaries. CRITICAL: NEVER output code blocks.",
                     { model: "analysis", maxOutputTokens: 512, temperature: 0.5 }
                 );
                 sendSSE(res, { type: "text", content: explainResponse.trim() || summary, partial: false });
