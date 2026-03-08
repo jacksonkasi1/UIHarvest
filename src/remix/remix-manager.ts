@@ -386,8 +386,14 @@ export class RemixManager {
                     progress: 0.1,
                 });
 
+                // Derive a meaningful brand name from the user's prompt
+                const promptText = job.initialPrompt || "";
+                const derivedName = promptText.length > 0
+                    ? promptText.slice(0, 60).replace(/[^a-zA-Z0-9\s-]/g, "").trim() || "My App"
+                    : "My App";
+
                 const brand: BrandIdentity = {
-                    name: "AI Studio app",
+                    name: derivedName,
                     colors: [
                         { hex: "#000000", role: "background" },
                         { hex: "#FFFFFF", role: "text" },
@@ -412,7 +418,9 @@ export class RemixManager {
                     principles,
                     pages: [{ path: "src/App.tsx", title: "App", description: job.initialPrompt || "App layout", sections: [] }],
                     targetStack: { framework: "react", bundler: "vite", language: "typescript", styling: "tailwindcss", ui: "shadcn" },
-                    generationHints: []
+                    generationHints: job.initialPrompt
+                        ? [`The user's core request: "${job.initialPrompt}". Build EXACTLY what they described, not a generic template.`]
+                        : []
                 };
 
                 const generator = new RemixCodeGenerator(spec);
