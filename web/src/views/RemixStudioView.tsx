@@ -660,17 +660,32 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
             case "tool_start":
                 setIsThinking(false)
                 setMessages((prev) =>
-                    prev.map((m) =>
-                        m.id === assistantMsgId
-                            ? {
-                                ...m,
-                                toolExecutions: [
-                                    ...(m.toolExecutions || []),
-                                    { tool: event.tool || "unknown", status: "running" as const, message: event.message || "Processing..." }
-                                ]
+                    prev.map((m) => {
+                        if (m.id !== assistantMsgId) return m
+
+                        const toolExecs = [...(m.toolExecutions || [])]
+                        let lastRunning = -1
+                        for (let idx = toolExecs.length - 1; idx >= 0; idx--) {
+                            if (toolExecs[idx].status === "running") { lastRunning = idx; break }
+                        }
+
+                        if (lastRunning >= 0) {
+                            // Update existing running tool message
+                            toolExecs[lastRunning] = {
+                                ...toolExecs[lastRunning],
+                                message: event.message || "Processing..."
                             }
-                            : m
-                    )
+                        } else {
+                            // Add new running tool
+                            toolExecs.push({
+                                tool: event.tool || "unknown",
+                                status: "running" as const,
+                                message: event.message || "Processing..."
+                            })
+                        }
+
+                        return { ...m, toolExecutions: toolExecs }
+                    })
                 )
                 break
 
