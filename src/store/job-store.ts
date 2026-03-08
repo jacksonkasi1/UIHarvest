@@ -134,17 +134,29 @@ class JobStore {
     }
 
     /**
-     * List all persisted job IDs (for admin/debug).
+     * List all persisted jobs (for dashboard).
      */
-    async listIds(): Promise<string[]> {
+    async listJobs(): Promise<Omit<PersistedJob, "result" | "conversationHistory">[]> {
         if (!this.db) return [];
 
         try {
             const snap = await this.db.collection(COLLECTION)
                 .orderBy("updatedAt", "desc")
-                .limit(100)
+                .limit(50)
                 .get();
-            return snap.docs.map(d => d.id);
+            return snap.docs.map(d => {
+                const data = d.data() as PersistedJob;
+                return {
+                    id: data.id,
+                    status: data.status,
+                    phase: data.phase,
+                    createdAt: data.createdAt,
+                    updatedAt: data.updatedAt,
+                    referenceUrl: data.referenceUrl,
+                    targetUrl: data.targetUrl,
+                    initialPrompt: data.initialPrompt,
+                };
+            });
         } catch (err) {
             console.error("[JobStore] List error:", (err as Error).message);
             return [];

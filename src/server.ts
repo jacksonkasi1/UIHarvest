@@ -10,6 +10,7 @@ import { JobManager } from "./job-manager.js";
 import { streamTarGz } from "./zip-builder.js";
 import { discoverPages } from "./extract-pipeline.js";
 import { RemixManager } from "./remix/remix-manager.js";
+import { jobStore } from "./store/job-store.js";
 
 // ** import types
 import type { ProgressEvent } from "./extract-pipeline.js";
@@ -260,6 +261,41 @@ export function startServer(
       res.json({ success: true });
     } else {
       res.status(401).json({ error: "Invalid password" });
+    }
+  });
+
+  app.post("/api/logout", (req, res) => {
+    res.clearCookie(SESSION_COOKIE);
+    res.json({ success: true });
+  });
+
+  // ── Dashboard Jobs API ───────────────────────────────────────────────────
+
+  app.get("/api/jobs", authMiddleware, async (req, res) => {
+    try {
+      if (!jobStore.isEnabled) {
+        res.json({ jobs: [] });
+        return;
+      }
+      const jobs = await jobStore.listJobs();
+      res.json({ jobs });
+    } catch (err) {
+      console.error("[Dashboard] Failed to list jobs:", err);
+      res.status(500).json({ error: "Failed to load jobs" });
+    }
+  });
+
+  app.delete("/api/jobs/:id", authMiddleware, async (req, res) => {
+    try {
+      if (!jobStore.isEnabled) {
+        res.json({ success: true });
+        return;
+      }
+      await jobStore.delete(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[Dashboard] Failed to delete job:", err);
+      res.status(500).json({ error: "Failed to delete job" });
     }
   });
 
@@ -582,30 +618,17 @@ export function startServer(
     // Abort controller — only truly abort when client disconnects AFTER we've
     // started streaming (not from Cloud Run's premature 'close' event on connect).
     const controller = new AbortController();
-    let streamingStarted = false;
-
     req.on("close", () => {
-      // Cloud Run can fire 'close' prematurely while still reading the request.
-      // Only treat as real disconnect after streaming has begun.
-      if (streamingStarted) {
-        console.log("[chat] Client disconnected, aborting.");
-        controller.abort();
-      } else {
-        // Give it a brief grace period — if this was a real disconnect the
-        // response will be writableEnded shortly after.
-        setTimeout(() => {
-          if (res.writableEnded) {
-            controller.abort(); // was a real early disconnect
-          }
-          // Otherwise: false-positive close from proxy, ignore it
-        }, 500);
-      }
+      // Due to Cloud Run reverse proxy quirks, 'close' may fire prematurely
+      // right after reading the POST body. We NEVER abort the backend generation layer.
+      // If the client truly disconnects, the connection will drop but the generation
+      // finishes gracefully and saves to Firestore.
+      clearInterval(keepAlive);
     });
 
     const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
 
     try {
-      streamingStarted = true;
       await handleChatMessage(
         res,
         prompt,
