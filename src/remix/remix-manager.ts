@@ -16,9 +16,10 @@ import { extractPrinciples } from "./principles-extractor.js";
 import { generateRemixSpec } from "./spec-generator.js";
 import { RemixCodeGenerator } from "./codegen/generator.js";
 import { buildSystemPrompt } from "./codegen/system-prompt.js";
+import { jobStore } from "../store/job-store.js";
 
 // ** import types (chat)
-import type { ChatHandlerDeps } from "./chat-handler.js";
+import type { ChatHandlerDeps, ConversationMessage } from "./chat-handler.js";
 
 // ** import types
 import type {
@@ -80,10 +81,73 @@ export class RemixManager {
     }
 
     /**
-     * Get a remix job by ID.
+     * Get a remix job by ID (in-memory only, non-blocking).
      */
     get(id: string): RemixJob | undefined {
         return this.jobs.get(id);
+    }
+
+    /**
+     * Get a remix job by ID, hydrating from Firestore on cache miss.
+     * Call this from endpoints where a cold-start may have cleared memory.
+     */
+    async getOrHydrate(id: string): Promise<RemixJob | undefined> {
+        const cached = this.jobs.get(id);
+        if (cached) return cached;
+
+        if (!jobStore.isEnabled) return undefined;
+
+        // Try to restore from Firestore
+        console.log(`[RemixManager] Cache miss for ${id}, checking Firestore...`);
+        const persisted = await jobStore.load(id);
+        if (!persisted) {
+            console.log(`[RemixManager] Job ${id} not found in Firestore`);
+            return undefined;
+        }
+
+        const { job: pj, files } = persisted;
+
+        // Only restore completed jobs (running jobs lost their worker context)
+        if (pj.status !== "done") {
+            console.log(`[RemixManager] Job ${id} was ${pj.status} — not hydrating incomplete job`);
+            return undefined;
+        }
+
+        if (!pj.result?.spec) {
+            console.log(`[RemixManager] Job ${id} has no spec — skipping hydration`);
+            return undefined;
+        }
+
+        // Reconstruct the job object
+        const job: RemixJob = {
+            id: pj.id,
+            referenceUrl: pj.referenceUrl,
+            targetUrl: pj.targetUrl,
+            initialPrompt: pj.initialPrompt,
+            status: "done",
+            phase: "ready",
+            events: [{ phase: "ready", message: "Restored from storage" }],
+            result: pj.result,
+            files,
+            createdAt: pj.createdAt,
+            listeners: new Set(),
+        };
+
+        // Rebuild generator for iteration support
+        const spec = pj.result.spec;
+        const generator = new RemixCodeGenerator(spec, files);
+        this.jobs.set(id, job);
+        this.generators.set(id, generator);
+
+        // Restore conversation history if present
+        if (pj.conversationHistory && pj.conversationHistory.length > 0) {
+            // Imported dynamically to avoid circular deps
+            const { restoreConversation } = await import("./chat-handler.js");
+            restoreConversation(id, pj.conversationHistory);
+        }
+
+        console.log(`[RemixManager] Restored job ${id} from Firestore (${files.length} files)`);
+        return job;
     }
 
     /**
@@ -150,6 +214,7 @@ export class RemixManager {
     /**
      * Get chat handler dependencies for a job.
      * Returns null if job doesn't exist or isn't ready.
+     * NOTE: For cold-start recovery, use getOrHydrate() first.
      */
     getChatDeps(id: string): ChatHandlerDeps | null {
         const job = this.jobs.get(id);
@@ -166,6 +231,10 @@ export class RemixManager {
             codegenSystemPrompt: buildSystemPrompt(spec),
             onFilesUpdated: (newFiles) => {
                 job.files = newFiles;
+                // Write-through: persist updated files
+                jobStore.save(job).catch(err =>
+                    console.error("[RemixManager] Firestore file update failed:", err.message)
+                );
             },
         };
     }
@@ -371,7 +440,7 @@ export class RemixManager {
             // ── Done ─────────────────────────────────────────────────────────────
             job.result = {
                 success: true,
-                files: job.files, // Use job.files which is updated in branches
+                files: job.files,
                 spec,
             };
             job.status = "done";
@@ -380,6 +449,13 @@ export class RemixManager {
                 phase: "ready",
                 message: `Remix complete — ${job.files.length} files generated`,
                 progress: 1.0,
+            });
+
+            // Persist to Firestore for scale-to-zero recovery
+            jobStore.save(job).then(() => {
+                console.log(`[RemixManager] Job ${job.id} persisted to Firestore`);
+            }).catch(err => {
+                console.warn(`[RemixManager] Firestore persist failed (job still in memory): ${err.message}`);
             });
         } catch (err) {
             job.status = "error";

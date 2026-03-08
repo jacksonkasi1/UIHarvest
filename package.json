@@ -16,6 +16,7 @@
     "deploy": "bash deploy.sh"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^8.3.0",
     "@google/genai": "^1.44.0",
     "cookie-parser": "^1.4.7",
     "culori": "^4.0.2",
@@ -32,6 +33,7 @@
     "bun-types": "^1.1.0",
     "concurrently": "^9.2.1",
     "shadcn": "^4.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.18"
   }
 }

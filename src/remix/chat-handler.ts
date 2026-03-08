@@ -71,6 +71,15 @@ function getConversationContext(jobId: string): string {
         .join("\n");
 }
 
+/**
+ * Restore conversation history from Firestore after a cold-start.
+ * Called by RemixManager.getOrHydrate().
+ */
+export function restoreConversation(jobId: string, messages: ConversationMessage[]): void {
+    conversationStore.set(jobId, messages.slice(-MAX_CONVERSATION_HISTORY));
+    console.log(`[chat] Restored ${messages.length} conversation messages for job ${jobId}`);
+}
+
 // ════════════════════════════════════════════════════
 // PACKAGE AUTO-DETECTION (from open-lovable patterns)
 // ════════════════════════════════════════════════════

@@ -55,8 +55,30 @@ fi
 
 ENV_VARS="GOOGLE_CLOUD_API_KEY=${GOOGLE_CLOUD_API_KEY}"
 
+# Add project ID for Firestore (uses ADC/service-account auth on Cloud Run automatically)
+GCP_PROJECT="${GCP_PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
+if [ -n "${GCP_PROJECT:-}" ]; then
+  ENV_VARS="${ENV_VARS},GOOGLE_CLOUD_PROJECT=${GCP_PROJECT}"
+fi
+
 if [ -n "${SITE_PASSWORD:-}" ]; then
   ENV_VARS="${ENV_VARS},SITE_PASSWORD=${SITE_PASSWORD}"
+fi
+
+if [ -n "${GEMINI_MODEL_VISION:-}" ]; then
+  ENV_VARS="${ENV_VARS},GEMINI_MODEL_VISION=${GEMINI_MODEL_VISION}"
+fi
+
+if [ -n "${GEMINI_MODEL_ANALYSIS:-}" ]; then
+  ENV_VARS="${ENV_VARS},GEMINI_MODEL_ANALYSIS=${GEMINI_MODEL_ANALYSIS}"
+fi
+
+if [ -n "${GEMINI_MODEL_CODEGEN:-}" ]; then
+  ENV_VARS="${ENV_VARS},GEMINI_MODEL_CODEGEN=${GEMINI_MODEL_CODEGEN}"
+fi
+
+if [ -n "${GEMINI_CONCURRENCY:-}" ]; then
+  ENV_VARS="${ENV_VARS},GEMINI_CONCURRENCY=${GEMINI_CONCURRENCY}"
 fi
 
 echo "🚀  Deploying ${SERVICE_NAME} to Cloud Run (${GCP_REGION})…"
@@ -69,6 +91,9 @@ gcloud run deploy "${SERVICE_NAME}" \
   --cpu 4 \
   --timeout 3600 \
   --cpu-boost \
+  --min-instances 0 \
+  --max-instances 3 \
+  --concurrency 80 \
   --session-affinity \
   --set-env-vars "${ENV_VARS}"
 

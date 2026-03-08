@@ -471,8 +471,12 @@ export function startServer(
     res.json({ jobId: job.id, status: job.status, phase: job.phase });
   });
 
-  app.get("/api/remix/:id/progress", authMiddleware, (req, res) => {
-    const job = remixManager.get(req.params.id);
+  app.get("/api/remix/:id/progress", authMiddleware, async (req, res) => {
+    // Try memory first, then Firestore (cold-start recovery)
+    let job = remixManager.get(req.params.id);
+    if (!job) {
+      job = await remixManager.getOrHydrate(req.params.id);
+    }
     if (!job) {
       res.status(404).json({ error: "Remix job not found" });
       return;
@@ -500,8 +504,12 @@ export function startServer(
     });
   });
 
-  app.get("/api/remix/:id/files", authMiddleware, (req, res) => {
-    const job = remixManager.get(req.params.id);
+  app.get("/api/remix/:id/files", authMiddleware, async (req, res) => {
+    // Try memory first, then Firestore (cold-start recovery)
+    let job = remixManager.get(req.params.id);
+    if (!job) {
+      job = await remixManager.getOrHydrate(req.params.id);
+    }
     if (!job) {
       res.status(404).json({ error: "Remix job not found" });
       return;
@@ -542,6 +550,10 @@ export function startServer(
       return;
     }
 
+    // Hydrate from Firestore on cold-start (memory miss)
+    if (!remixManager.get(req.params.id)) {
+      await remixManager.getOrHydrate(req.params.id);
+    }
     const chatDeps = remixManager.getChatDeps(req.params.id);
     if (!chatDeps) {
       res.status(404).json({ error: "Job not found or not ready" });
@@ -557,24 +569,43 @@ export function startServer(
 
     // Send initial SSE comment to prime the connection
     res.write(": connected\n\n");
+    if (typeof (res as any).flush === "function") (res as any).flush();
 
     // Keepalive to prevent proxy timeout
     const keepAlive = setInterval(() => {
       if (!res.writableEnded) {
         res.write(": keep-alive\n\n");
+        if (typeof (res as any).flush === "function") (res as any).flush();
       }
     }, 15_000);
 
-    // Abort controller for stop/cancel
+    // Abort controller — only truly abort when client disconnects AFTER we've
+    // started streaming (not from Cloud Run's premature 'close' event on connect).
     const controller = new AbortController();
+    let streamingStarted = false;
+
     req.on("close", () => {
-      clearInterval(keepAlive);
-      controller.abort();
+      // Cloud Run can fire 'close' prematurely while still reading the request.
+      // Only treat as real disconnect after streaming has begun.
+      if (streamingStarted) {
+        console.log("[chat] Client disconnected, aborting.");
+        controller.abort();
+      } else {
+        // Give it a brief grace period — if this was a real disconnect the
+        // response will be writableEnded shortly after.
+        setTimeout(() => {
+          if (res.writableEnded) {
+            controller.abort(); // was a real early disconnect
+          }
+          // Otherwise: false-positive close from proxy, ignore it
+        }, 500);
+      }
     });
 
     const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
 
     try {
+      streamingStarted = true;
       await handleChatMessage(
         res,
         prompt,
@@ -586,6 +617,7 @@ export function startServer(
       console.error("[chat-endpoint] Error:", (err as Error).message);
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ type: "error", error: (err as Error).message })}\n\n`);
+        if (typeof (res as any).flush === "function") (res as any).flush();
       }
     }
 

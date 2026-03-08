@@ -22,10 +22,13 @@ export class RemixCodeGenerator {
     private systemPrompt: string;
     private files: GeneratedFile[] = [];
 
-    constructor(spec: RemixSpec) {
+    constructor(spec: RemixSpec, initialFiles?: GeneratedFile[]) {
         this.spec = spec;
         this.ai = new GeminiClient();
         this.systemPrompt = buildSystemPrompt(spec);
+        if (initialFiles) {
+            this.files = initialFiles;
+        }
     }
 
     /**
