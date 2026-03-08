@@ -1,6 +1,6 @@
 // ** import core packages
 import { useEffect, useMemo, useState } from "react"
-import { Activity, XCircle } from "lucide-react"
+import { Activity, XCircle, Wand2 } from "lucide-react"
 
 // ** import types
 import type { DesignSystemData, MemoryDocumentGroup } from "@/types/design-system"
@@ -46,13 +46,16 @@ import {
   PseudoElementsView,
   VideosView,
   MemoryView,
+  RemixLandingView,
+  RemixStudioView,
+  DashboardView,
 } from "./views"
 
 // ════════════════════════════════════════════════════
 // APP MODES
 // ════════════════════════════════════════════════════
 
-type AppMode = "checking" | "password" | "landing" | "page-selection" | "progress" | "explorer"
+type AppMode = "checking" | "password" | "dashboard" | "landing" | "page-selection" | "progress" | "explorer" | "remix-landing" | "remix-studio"
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("checking")
@@ -83,6 +86,9 @@ export default function App() {
   const [discoveredPages, setDiscoveredPages] = useState<PageInfo[]>([])
   const [selectedUrl, setSelectedUrl] = useState<string>("")
   const [pendingRunMemory, setPendingRunMemory] = useState(false)
+
+  // Remix state
+  const [remixJobId, setRemixJobId] = useState<string | null>(null)
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -129,15 +135,15 @@ export default function App() {
             setMode("progress")
           } else {
             localStorage.removeItem("uih_jobId")
-            tryLoadLegacyExplorer()
+            setMode("dashboard")
           }
         })
         .catch(() => {
           localStorage.removeItem("uih_jobId")
-          tryLoadLegacyExplorer()
+          setMode("dashboard")
         })
     } else {
-      tryLoadLegacyExplorer()
+      setMode("dashboard")
     }
   }
 
@@ -159,12 +165,41 @@ export default function App() {
           .catch(() => { })
       })
       .catch(() => {
-        // No legacy data — show landing page
+        // No legacy data — show dashboard instead of landing
         setLoading(false)
-        setMode("landing")
+        setMode("dashboard")
       })
   }
 
+  const handleDashboardNavigate = (targetMode: 'explorer' | 'landing' | 'remix-landing' | 'remix-studio', data?: any) => {
+    if (targetMode === 'explorer') {
+      tryLoadLegacyExplorer()
+    } else if (targetMode === 'remix-studio') {
+      if (data?.jobId) {
+        setRemixJobId(data.jobId)
+        setMode("remix-studio")
+      } else {
+        // Create a new remix job starting from a prompt
+        fetch("/api/remix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: data?.initialPrompt }),
+        })
+          .then(res => res.json())
+          .then(resData => {
+            if (resData.jobId) {
+              setRemixJobId(resData.jobId)
+              setMode("remix-studio")
+            }
+          })
+          .catch(err => {
+            console.error("Failed to start AI Studio:", err)
+          })
+      }
+    } else {
+      setMode(targetMode)
+    }
+  }
   // ── Memory content loading (explorer mode) ──────────────────────────
   useEffect(() => {
     if (mode !== "explorer") return
@@ -258,7 +293,31 @@ export default function App() {
     setJobApiBase(null)
     setDiscoveredPages([])
     setSelectedUrl("")
-    setMode("landing")
+    setMode("dashboard")
+  }
+
+  // ── Remix Handlers ──────────────────────────────────────────────────
+
+  const handleStartRemix = async (referenceUrl: string, targetUrl: string) => {
+    try {
+      const res = await fetch("/api/remix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referenceUrl, targetUrl: targetUrl || undefined }),
+      })
+      const data = await res.json()
+      if (data.jobId) {
+        setRemixJobId(data.jobId)
+        setMode("remix-studio")
+      }
+    } catch (err) {
+      console.error("Failed to start remix:", err)
+    }
+  }
+
+  const handleRemixBack = () => {
+    setRemixJobId(null)
+    setMode("dashboard")
   }
 
   // ════════════════════════════════════════════════════
@@ -279,6 +338,11 @@ export default function App() {
     return <PasswordView onAuthenticated={handleAuthenticated} />
   }
 
+  // Dashboard
+  if (mode === "dashboard") {
+    return <DashboardView onNavigate={handleDashboardNavigate} />
+  }
+
   // Landing page
   if (mode === "landing") {
     return (
@@ -286,6 +350,26 @@ export default function App() {
         onPagesDiscovered={handlePagesDiscovered}
         existingJobId={localStorage.getItem("uih_jobId")}
         onResumeJob={handleResumeJob}
+      />
+    )
+  }
+
+  // Remix landing
+  if (mode === "remix-landing") {
+    return (
+      <RemixLandingView
+        onStartRemix={handleStartRemix}
+        onBack={handleBackToLanding}
+      />
+    )
+  }
+
+  // Remix studio
+  if (mode === "remix-studio" && remixJobId) {
+    return (
+      <RemixStudioView
+        jobId={remixJobId}
+        onBack={handleRemixBack}
       />
     )
   }
@@ -362,7 +446,16 @@ export default function App() {
           />
 
           <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12 relative w-full flex flex-col">
-            <SidebarTrigger className="absolute top-4 left-4" />
+            <div className="flex items-center justify-between mb-2">
+              <SidebarTrigger />
+              <button
+                className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                onClick={() => setMode("remix-landing")}
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Remix
+              </button>
+            </div>
             <div className="mx-auto max-w-6xl w-full space-y-8 mt-6 lg:mt-0">
               {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
               {activeTab === "tree" && <TreeView data={data} setSelectedComp={setSelectedComp} />}
