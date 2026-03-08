@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 // ** import lib
-import { mountAndRun, writeFiles, installPackages } from "@/lib/webcontainer"
+import { preWarmContainer, mountAndRunWithSnapshot, writeFiles, installPackages } from "@/lib/webcontainer"
 
 // ** import components
 import { CodeEditor } from "@/components/CodeEditor"
@@ -358,27 +358,34 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         }
     }, [messages, jobId])
 
-    // ── WebContainer boot ───────────────────────────────────────────────
+    // ── Container event handler ──────────────────────────────────────────
+    const onContainerEvent = useCallback((event: ContainerEvent) => {
+        const logLine = `[${event.type}] ${event.message}`
+        setContainerLogs((prev) => [...prev.slice(-200), logLine])
+
+        if (event.type === "server-ready" && event.url) {
+            setPreviewUrl(event.url)
+            setContainerReady(true)
+            setIsBootingContainer(false)
+        }
+        if (event.type === "error") {
+            setError(event.message)
+            setIsBootingContainer(false)
+        }
+    }, [])
+
+    // ── Pre-warm WebContainer immediately on mount ──────────────────────
+    // This boots WC and installs base deps IN PARALLEL with AI code generation
+    useEffect(() => {
+        preWarmContainer(onContainerEvent).catch(console.error)
+    }, [onContainerEvent])
+
+    // ── WebContainer boot (with snapshot support) ───────────────────────
     const bootContainer = useCallback(async (filesToMount: GeneratedFile[]) => {
         if (isBootingContainer || containerReady) return
         setIsBootingContainer(true)
 
-        const onEvent = (event: ContainerEvent) => {
-            const logLine = `[${event.type}] ${event.message}`
-            setContainerLogs((prev) => [...prev.slice(-200), logLine])
-
-            if (event.type === "server-ready" && event.url) {
-                setPreviewUrl(event.url)
-                setContainerReady(true)
-                setIsBootingContainer(false)
-            }
-            if (event.type === "error") {
-                setError(event.message)
-                setIsBootingContainer(false)
-            }
-        }
-
-        const result = await mountAndRun(filesToMount, onEvent)
+        const result = await mountAndRunWithSnapshot(jobId, filesToMount, onContainerEvent)
         teardownRef.current = result.teardown
 
         if (result.previewUrl) {
@@ -386,7 +393,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
             setContainerReady(true)
         }
         setIsBootingContainer(false)
-    }, [isBootingContainer, containerReady])
+    }, [isBootingContainer, containerReady, jobId, onContainerEvent])
 
     // ── SSE progress stream ─────────────────────────────────────────────
     useEffect(() => {
