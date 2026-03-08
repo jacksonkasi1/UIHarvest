@@ -38,6 +38,8 @@ let _bootPromise: Promise<WebContainer> | null = null
 let _preWarmPromise: Promise<void> | null = null
 let _preWarmed = false
 let _snapshotVersion: string = "unknown"
+let _cancelPreWarm = false
+let _preWarmInstallProcess: any = null
 
 /**
  * Boot or return the existing WebContainer instance.
@@ -193,6 +195,7 @@ const BASE_SCAFFOLD_FILES: GeneratedFile[] = [
 export async function preWarmContainer(
     onEvent: ContainerEventHandler
 ): Promise<void> {
+    if (_cancelPreWarm) return
     if (_preWarmPromise) return _preWarmPromise
     if (_preWarmed) return
 
@@ -206,26 +209,30 @@ async function _doPreWarm(onEvent: ContainerEventHandler): Promise<void> {
 
         onEvent({ type: "boot", message: "Booting WebContainer\u2026" })
         const wc = await getInstance()
+        if (_cancelPreWarm) return
         onEvent({ type: "boot", message: "WebContainer ready" })
 
         _snapshotVersion = await versionPromise
+        if (_cancelPreWarm) return
 
         onEvent({ type: "mount", message: "Mounting scaffold\u2026" })
         const tree = filesToTree(BASE_SCAFFOLD_FILES)
         await wc.mount(tree)
+        if (_cancelPreWarm) return
         onEvent({ type: "mount", message: "Scaffold mounted" })
 
         onEvent({ type: "install", message: "Installing dependencies (npm install)\u2026" })
 
-        const installProcess = await wc.spawn("npm", [
+        _preWarmInstallProcess = await wc.spawn("npm", [
             "install", "--no-color", "--no-progress", "--prefer-offline", "--legacy-peer-deps",
         ])
 
         const decoder = new TextDecoder()
-        const installOutputReader = installProcess.output.getReader()
+        const installOutputReader = _preWarmInstallProcess.output.getReader()
         void (async () => {
             try {
                 while (true) {
+                    if (_cancelPreWarm) break
                     const { done, value } = await installOutputReader.read()
                     if (done) break
                     const text = typeof value === "string" ? value : decoder.decode(value)
@@ -241,7 +248,8 @@ async function _doPreWarm(onEvent: ContainerEventHandler): Promise<void> {
             }
         })()
 
-        const installExitCode = await installProcess.exit
+        const installExitCode = await _preWarmInstallProcess.exit
+        if (_cancelPreWarm) return
         if (installExitCode !== 0) {
             throw new Error(`npm install failed with exit code ${installExitCode}`)
         }
@@ -276,11 +284,20 @@ export async function mountAndRunWithSnapshot(
 
         if (cachedSnapshot) {
             // CACHE HIT: Instant restore
+            _cancelPreWarm = true
+            if (_preWarmInstallProcess) {
+                try { _preWarmInstallProcess.kill() } catch (e) { }
+            }
             onEvent({ type: "cache-hit", message: "Restoring from cache\u2026 (instant)" })
 
             const wc = await getInstance()
+
+            // Wait 150ms to ensure install process fully terminates before overwriting the fs
+            await new Promise((resolve) => setTimeout(resolve, 150))
+
             await wc.mount(cachedSnapshot)
             onEvent({ type: "mount", message: "Snapshot restored" })
+
 
             // Overwrite with latest source files
             const sourceFiles = files.filter((f) => !f.path.startsWith("node_modules"))
@@ -491,5 +508,7 @@ export async function teardown(): Promise<void> {
         _bootPromise = null
         _preWarmPromise = null
         _preWarmed = false
+        _cancelPreWarm = false
+        _preWarmInstallProcess = null
     }
 }
