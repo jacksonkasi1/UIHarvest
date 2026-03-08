@@ -62,6 +62,18 @@ ${spec.principles.componentPatterns.map((c) => `- **${c.name}** (${c.type}): ${c
 ## GENERATION HINTS
 ${spec.generationHints.map((h) => `- ${h}`).join("\n")}
 
+## CRITICAL CODE SAFETY RULES — SYNTAX ERRORS = TOTAL FAILURE
+- Every string literal (", '), template literal (\`), and JSX attribute MUST be properly closed on the SAME line it opens
+- Every opening brace { MUST have a matching closing brace } — count them!
+- Every opening parenthesis ( MUST have a matching closing parenthesis )
+- Every JSX tag MUST be properly closed (<Tag /> or <Tag>...</Tag>)
+- Do NOT place ANY text, explanation, or markdown AFTER the closing \`\`\` fence of a code block
+- Do NOT place ANY text, explanation, or markdown BEFORE the opening \`\`\` fence except between blocks
+- If you are running low on space, STILL close ALL brackets, braces, tags, and strings — truncated code is COMPLETELY UNUSABLE and causes a full crash
+- Never use unescaped backticks inside template literals — escape them with \\
+- Never split a string constant across lines without proper concatenation
+- Every file MUST be syntactically valid TypeScript/TSX that can be parsed by Babel without errors
+
 ## CRITICAL AESTHETIC REQUIREMENTS
 - Make the design visually STUNNING. No boring, generic layouts.
 - Use the brand colors boldly — gradients, overlays, accent highlights.
@@ -161,6 +173,14 @@ ${fileContents}
 - NEVER truncate — include EVERY line, ALL imports, functions, JSX, and closing tags
 - NO ellipsis (...) to skip content
 - The file MUST be runnable
+
+### CODE SAFETY — SYNTAX ERRORS = TOTAL FAILURE
+- Every string literal (", '), template literal (\`), and JSX attribute MUST be properly closed
+- Every { must have a matching }, every ( a matching ), every [ a matching ]
+- Every JSX tag MUST be closed (<Tag /> or <Tag>...</Tag>)
+- If running out of space, CLOSE ALL brackets, braces, strings, and tags FIRST — truncated code crashes the entire app
+- Do NOT place ANY markdown or explanation after the \`\`\` closing fence
+- Every file must be parseable by Babel without errors
 
 ### WHAT NOT TO DO
 - DO NOT regenerate unchanged files

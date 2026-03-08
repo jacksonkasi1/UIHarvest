@@ -1119,7 +1119,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                                             src={previewUrl}
                                             className="h-full w-full border-0"
                                             title="Remix Preview"
-                                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
                                         />
                                     </div>
                                 ) : (

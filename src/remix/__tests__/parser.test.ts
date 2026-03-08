@@ -85,6 +85,60 @@ export function C() { return null; }
         expect(files.length).toBe(3);
         expect(files.map((f) => f.path)).toEqual(["src/A.tsx", "src/B.tsx", "src/C.tsx"]);
     });
+
+    // ── NEW: Truncation recovery tests ─────────────────────────────────
+    it("recovers truncated code block (missing closing fence)", () => {
+        const output = `Here's the updated file:
+
+\`\`\`tsx file="src/components/ChatArea.tsx"
+import React from "react";
+
+export function ChatArea() {
+  return (
+    <div className="flex flex-col h-full">
+      <h1>Chat</h1>
+    </div>
+  );
+}`;
+        // Note: NO closing ``` — simulates Gemini truncation
+
+        const files = parseGeneratedFiles(output);
+        expect(files.length).toBe(1);
+        expect(files[0].path).toBe("src/components/ChatArea.tsx");
+        expect(files[0].content).toContain("export function ChatArea");
+    });
+
+    it("recovers multiple truncated blocks", () => {
+        const output = `\`\`\`tsx file="src/A.tsx"
+export function A() { return null; }
+\`\`\`
+
+\`\`\`tsx file="src/B.tsx"
+export function B() {
+  return <div>B</div>;
+}`;
+        // Second block is truncated (no closing ```)
+
+        const files = parseGeneratedFiles(output);
+        expect(files.length).toBe(2);
+        expect(files[0].path).toBe("src/A.tsx");
+        expect(files[1].path).toBe("src/B.tsx");
+        expect(files[1].content).toContain("export function B");
+    });
+
+    it("auto-repairs syntax issues in parsed files", () => {
+        const output = `\`\`\`tsx file="src/components/Broken.tsx"
+export function Broken() {
+  const msg = "unterminated string
+  return <div>{msg}</div>;
+}
+\`\`\``;
+
+        const files = parseGeneratedFiles(output);
+        expect(files.length).toBe(1);
+        // The unterminated string should have been repaired
+        expect(files[0].content).toContain('"unterminated string"');
+    });
 });
 
 describe("mergeFiles", () => {
