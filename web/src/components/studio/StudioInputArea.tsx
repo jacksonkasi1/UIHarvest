@@ -179,7 +179,7 @@ export function StudioInputArea({
                                     aria-label="Send message"
                                     variant="default"
                                     className="h-8 w-8 rounded-full transition-colors disabled:opacity-20"
-                                    disabled={!isReady || !chatInput.trim()}
+                                    disabled={!isReady || !chatInput?.trim()}
                                     onClick={handleSendMessage}
                                 >
                                     <ArrowUp aria-hidden="true" className="w-4 h-4" />
