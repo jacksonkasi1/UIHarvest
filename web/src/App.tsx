@@ -74,7 +74,7 @@ export default function App() {
   const [selectedSection, setSelectedSection] = useState<any>(null)
   const [selectedSvg, setSelectedSvg] = useState<any>(null)
 
-  const [theme, setTheme] = useState<"light" | "dark">("dark")
+  const [theme, setTheme] = useState<"light" | "dark">("light")
 
   // Job tracking
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
