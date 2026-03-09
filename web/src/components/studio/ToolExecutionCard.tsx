@@ -8,8 +8,9 @@ export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
     return (
         <div className="my-1 border border-border/60 rounded-xl bg-background/50 overflow-hidden transition-all duration-200 hover:border-border/80 shadow-sm">
             <button
-                className="flex items-center gap-2.5 w-full px-3 py-3 text-left text-[13px] transition-colors focus:outline-none bg-background"
+                className="flex items-center gap-2.5 w-full px-3 py-3 text-left text-[13px] transition-colors focus:outline-none bg-background hover:bg-muted/50"
                 onClick={() => setExpanded(!expanded)}
+                disabled={!exec.summary && exec.status === "running"}
             >
                 {exec.status === "running" ? (
                     <div className="relative shrink-0">

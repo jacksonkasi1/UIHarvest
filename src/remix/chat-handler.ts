@@ -534,7 +534,7 @@ CRITICAL RULE: DO NOT write any code blocks. DO NOT output file contents. ONLY o
 
 function buildChangeSummary(paths: string[]): string {
     if (paths.length === 0) return "No files changed.";
-    if (paths.length === 1) return `Updated \`${paths[0]}\``;
-    if (paths.length <= 3) return `Updated ${paths.map(p => `\`${p}\``).join(", ")}`;
+    if (paths.length === 1) return `Updated 1 file: \`${paths[0]}\``;
+    if (paths.length <= 3) return `Updated ${paths.length} files: ${paths.map(p => `\`${p}\``).join(", ")}`;
     return `Updated ${paths.length} files: ${paths.slice(0, 3).map(p => `\`${p}\``).join(", ")} and ${paths.length - 3} more`;
 }
