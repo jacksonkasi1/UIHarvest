@@ -96,6 +96,23 @@ export function parseGeneratedFiles(output: string): GeneratedFile[] {
         }
     }
 
+    // ── Fallback: file path mentioned in preceding text ───────────────
+    // Catches patterns like: "Here's the updated `src/components/Foo.tsx`:" followed by a code block
+    if (files.length === 0) {
+        const textPathRegex = /[`"']?(src\/[a-zA-Z0-9_./\\-]+\.[a-zA-Z]+)[`"']?\s*(?::|：|\n)\s*```(?:tsx?|jsx?|css)\s*\n([\s\S]*?)```/g;
+
+        while ((match = textPathRegex.exec(output)) !== null) {
+            const filePath = match[1].trim();
+            let content = match[2].trimEnd() + "\n";
+
+            if (filePath && content.trim()) {
+                console.warn(`[parser] Recovered file from text-path pattern: "${filePath}" (${content.length} chars)`);
+                const result = validateAndRepair(content, filePath);
+                files.push({ path: filePath, content: result.repaired });
+            }
+        }
+    }
+
     return files;
 }
 

@@ -127,13 +127,29 @@ function detectPackages(code: string): string[] {
 
 type Intent = "conversation" | "code_change";
 
-const INTENT_SYSTEM_PROMPT = `You are an intent classifier for a live coding platform. 
-Given a user message, classify it as ONE of:
-- "conversation" — greetings, questions about the project, asking for explanations, general chat, help requests, or anything that does NOT require modifying code files
-- "code_change" — requests to write code, modify, add, remove, fix, update, delete, clear, clone, or change any aspect of the website code, design, layout, colors, components, etc.
+const INTENT_SYSTEM_PROMPT = `You are an intent classifier for a live coding platform where an AI assistant edits website code in real time.
 
-If the user is asking to build, create, write, or generate code, it is ALWAYS a "code_change".
-If the user says "make a clone", "delete code", "write code", it is a "code_change".
+Given a user message, classify it as ONE of:
+- "conversation" — greetings, asking "what is X?", asking for explanations of concepts, general chat that does NOT imply any file or visual changes
+- "code_change" — ANY request that implies modifying, fixing, building, creating, updating, adding, removing, or changing website code, files, design, layout, colors, components, content, text, images, or functionality
+
+## CRITICAL RULES — when in doubt, ALWAYS choose "code_change"
+
+These are ALWAYS "code_change":
+- Fixing errors, bugs, crashes, or build failures (e.g. "fix this", "clear the error", "it's broken", "resolve this issue")
+- Any request referencing a screenshot or image of the website
+- Building, creating, writing, generating, cloning, or scaffolding anything
+- Changing visual appearance: colors, fonts, sizes, spacing, layout, responsive, dark mode, hover effects, animations
+- Adding, removing, updating, or replacing components, sections, pages, or features
+- Any imperative sentence about the website (e.g. "make it bigger", "add a footer", "remove the header")
+- Requests containing error messages, stack traces, or file paths
+- "Do it", "go ahead", "yes", "try again", "retry" when the previous conversation was about code
+
+These are "conversation":
+- "What tech stack does this use?"
+- "How does the routing work?"
+- "Hello", "Thanks", "Who are you?"
+- Questions that ONLY ask for information without requesting changes
 
 Respond with ONLY the word "conversation" or "code_change". Nothing else.`;
 
@@ -158,8 +174,16 @@ async function classifyIntent(ai: GeminiClient, message: string): Promise<Intent
 }
 
 function classifyByKeywords(message: string): Intent {
-    const codeKeywords = /\b(build|create|change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet|copy|replicate|write|code|delete|clear|clone|generate)\b/i;
-    return codeKeywords.test(message) ? "code_change" : "conversation";
+    const codeKeywords = /\b(build|create|change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet|copy|replicate|write|code|delete|clear|clone|generate|error|bug|broken|crash|issue|resolve|debug|repair|redo|retry|again|implement|refactor|redesign|rebuild|convert)\b/i;
+    // Affirmative responses in context of an ongoing code conversation
+    const affirmativeKeywords = /^(yes|yeah|yep|do it|go ahead|sure|ok|okay|try again|retry|redo)\b/i;
+    // Error-related patterns (stack traces, file paths, error messages)
+    const errorPatterns = /\b(unexpected token|syntax error|cannot find|is not defined|failed to compile|module not found|\.tsx|\.ts|\.jsx|\.js|\.css|line \d+|:\d+:\d+)\b/i;
+
+    if (codeKeywords.test(message)) return "code_change";
+    if (affirmativeKeywords.test(message)) return "code_change";
+    if (errorPatterns.test(message)) return "code_change";
+    return "conversation";
 }
 
 // ════════════════════════════════════════════════════
@@ -181,7 +205,15 @@ When chatting:
 - You can discuss design decisions, suggest improvements, explain code
 - Use markdown formatting (bold, code blocks, lists) in your responses
 - If the user seems to want a code change, suggest what they could ask for
-- Keep responses focused and under 200 words unless they ask for detail`;
+- Keep responses focused and under 200 words unless they ask for detail
+
+## CRITICAL RULE — NEVER WRITE FULL CODE FILES
+- You are in CONVERSATION mode. You do NOT have the ability to edit files.
+- NEVER output full component code, full file contents, or large code blocks (>10 lines)
+- If the user wants code changes, tell them you'll make the changes and describe what you'd do — the system will automatically route to the code editor
+- You may show SMALL code snippets (under 10 lines) to explain concepts
+- NEVER use the format \`\`\`tsx file="..."\`\`\` — that is reserved for the code editor
+- If you catch yourself about to write a full React component, STOP — instead say "Let me make that change for you" and describe the change in natural language`;
 }
 
 // ════════════════════════════════════════════════════
@@ -281,6 +313,44 @@ export async function handleChatMessage(
 }
 
 // ════════════════════════════════════════════════════
+// CODE LEAK DETECTION
+// ════════════════════════════════════════════════════
+
+/**
+ * Detect when a "conversation" response has accidentally generated code
+ * that should have been a file edit. This catches intent misclassification.
+ *
+ * Heuristics:
+ * 1. Response contains fenced code blocks with file= attributes (the exact format our parser expects)
+ * 2. Response contains large fenced code blocks (>15 lines) that look like full component files
+ * 3. Response contains export default function / export function patterns inside code blocks
+ */
+function detectCodeLeak(text: string): boolean {
+    // Direct hit: contains our exact output format
+    if (/```[a-zA-Z0-9_.-]*\s+file="[^"]+"/m.test(text)) {
+        return true;
+    }
+
+    // Heuristic: large code blocks containing React component patterns
+    const codeBlockRegex = /```(?:tsx?|jsx?)\s*\n([\s\S]*?)```/g;
+    let match;
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+        const blockContent = match[1];
+        const lineCount = blockContent.split("\n").length;
+        // A code block >15 lines that contains component-like patterns is almost certainly a leaked file edit
+        if (lineCount > 15) {
+            const hasComponentPattern = /\b(export\s+default\s+function|export\s+function|export\s+const\s+\w+\s*[:=]|const\s+\w+\s*[:=]\s*\(.*\)\s*=>|function\s+\w+\s*\()/m.test(blockContent);
+            const hasJSX = /<[A-Z][a-zA-Z]*[\s/>]|<\/[A-Z]/m.test(blockContent);
+            if (hasComponentPattern || hasJSX) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// ════════════════════════════════════════════════════
 // CONVERSATION HANDLER (with streaming + fallback)
 // ════════════════════════════════════════════════════
 
@@ -329,6 +399,18 @@ async function handleConversation(
         }
 
         if (!signal.aborted && hasChunks) {
+            // ── CODE LEAK GUARD ──────────────────────────────
+            // If the "conversation" response accidentally contains full code blocks,
+            // the intent was misclassified. Redirect to code change pipeline.
+            if (detectCodeLeak(fullText)) {
+                console.warn("[chat] CODE LEAK DETECTED in conversation response — redirecting to code change pipeline");
+                // Clear the streamed text (it was code, not a conversation)
+                sendSSE(res, { type: "text", content: "", partial: false });
+                // Re-route to code change handler
+                await handleCodeChange(res, ai, userPrompt, images, deps, signal);
+                return;
+            }
+
             sendSSE(res, { type: "text", content: fullText, partial: false });
             console.log(`[chat] Streamed ${fullText.length} chars`);
             return;
@@ -353,6 +435,12 @@ async function handleConversation(
             );
 
             if (response && response.trim()) {
+                // Code leak guard for non-streaming fallback
+                if (detectCodeLeak(response)) {
+                    console.warn("[chat] CODE LEAK DETECTED in non-streaming fallback — redirecting to code change pipeline");
+                    await handleCodeChange(res, ai, userPrompt, images, deps, signal);
+                    return;
+                }
                 sendSSE(res, { type: "text", content: response.trim(), partial: false });
                 console.log(`[chat] Non-streaming fallback: ${response.trim().length} chars`);
             } else {
