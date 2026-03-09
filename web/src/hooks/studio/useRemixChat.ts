@@ -28,7 +28,7 @@ export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (
         }
     }, [messages, jobId])
 
-    const handleSendMessage = async (overridePrompt?: string) => {
+    const handleSendMessage = async (overridePrompt?: string, mode?: string) => {
         const prompt = (overridePrompt ?? chatInput).trim()
         if (!prompt || isStreaming) return
 
@@ -65,7 +65,7 @@ export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (
         abortControllerRef.current = controller
 
         try {
-            const body: Record<string, unknown> = { prompt }
+            const body: Record<string, unknown> = { prompt, mode }
             if (currentImages.length > 0) {
                 body.images = currentImages.map((img) => ({
                     data: img.data,

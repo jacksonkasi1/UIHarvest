@@ -222,6 +222,7 @@ export async function handleChatMessage(
     res: Response,
     userPrompt: string,
     images: Array<{ data: string; mimeType: string }> | undefined,
+    mode: string | undefined,
     deps: ChatHandlerDeps,
     signal: AbortSignal
 ): Promise<void> {
@@ -244,14 +245,17 @@ export async function handleChatMessage(
         }
 
         let intent: Intent;
-        if (images && images.length > 0) {
+        if (mode === "Yolo" || mode === "Smart") {
+            intent = "code_change";
+            console.log(`[chat] Intent forced to code_change by mode: ${mode}`);
+        } else if (images && images.length > 0) {
             // Strong heuristic: if user attaches an image, they almost always want a code change (e.g. "build this", "fix this bug")
             intent = "code_change";
         } else {
             console.log(`[chat] Classifying intent for: "${userPrompt.slice(0, 50)}..."`);
             intent = await classifyIntent(ai, userPrompt);
         }
-        console.log(`[chat] Intent: ${intent}`);
+        console.log(`[chat] Final Intent: ${intent}`);
 
         if (signal.aborted) {
             sendSSE(res, { type: "done" });

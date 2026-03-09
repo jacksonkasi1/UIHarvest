@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { WelcomeHero } from "./WelcomeHero"
 import { ChatMessageBubble } from "./ChatMessageBubble"
@@ -13,7 +13,7 @@ interface StudioChatPanelProps {
     isReady: boolean
     isStreaming: boolean
     isThinking: boolean
-    handleSendMessage: (overridePrompt?: string) => void
+    handleSendMessage: (overridePrompt?: string, mode?: string) => void
     handleStop: () => void
     attachedImages: ImageAttachment[]
     setAttachedImages: React.Dispatch<React.SetStateAction<ImageAttachment[]>>
@@ -39,6 +39,7 @@ export function StudioChatPanel({
 }: StudioChatPanelProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
+    const [selectedMode, setSelectedMode] = useState("Chat")
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -110,7 +111,7 @@ export function StudioChatPanel({
             }
         }
         if (prompt) {
-            handleSendMessage(prompt)
+            handleSendMessage(prompt, selectedMode)
         }
     }
 
@@ -156,6 +157,8 @@ export function StudioChatPanel({
                 handlePaste={handlePaste}
                 handleDrop={handleDrop}
                 chatInputRef={chatInputRef as any}
+                selectedMode={selectedMode}
+                setSelectedMode={setSelectedMode}
             />
         </div>
     )

@@ -580,7 +580,7 @@ export function startServer(
 
   // ── Streaming Chat API (SSE) ───────────────────────────────────────────────
   app.post("/api/remix/:id/chat", authMiddleware, async (req, res) => {
-    const { prompt, images } = req.body;
+    const { prompt, images, mode } = req.body;
     if (!prompt || typeof prompt !== "string") {
       res.status(400).json({ error: "prompt is required" });
       return;
@@ -633,6 +633,7 @@ export function startServer(
         res,
         prompt,
         imageAttachments,
+        mode,
         chatDeps,
         controller.signal
       );

@@ -15,7 +15,7 @@ interface StudioInputAreaProps {
     setChatInput: (val: string) => void
     isReady: boolean
     isStreaming: boolean
-    handleSendMessage: () => void
+    handleSendMessage: (overridePrompt?: string, mode?: string) => void
     handleStop: () => void
     attachedImages: ImageAttachment[]
     removeImage: (idx: number) => void
@@ -24,6 +24,8 @@ interface StudioInputAreaProps {
     handlePaste: (e: React.ClipboardEvent) => void
     handleDrop: (e: React.DragEvent) => void
     chatInputRef: React.RefObject<HTMLTextAreaElement | null>
+    selectedMode: string
+    setSelectedMode: (val: string) => void
 }
 
 export function StudioInputArea({
@@ -39,15 +41,16 @@ export function StudioInputArea({
     handleImageFiles,
     handlePaste,
     handleDrop,
-    chatInputRef
+    chatInputRef,
+    selectedMode,
+    setSelectedMode
 }: StudioInputAreaProps) {
     const [isDraggingOver, setIsDraggingOver] = useState(false)
-    const [selectedMode, setSelectedMode] = useState("Chat")
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            handleSendMessage()
+            handleSendMessage(undefined, selectedMode)
         }
     }
 
@@ -180,7 +183,7 @@ export function StudioInputArea({
                                     variant="default"
                                     className="h-8 w-8 rounded-full transition-colors disabled:opacity-20"
                                     disabled={!isReady || !chatInput?.trim()}
-                                    onClick={handleSendMessage}
+                                    onClick={() => handleSendMessage(undefined, selectedMode)}
                                 >
                                     <ArrowUp aria-hidden="true" className="w-4 h-4" />
                                 </Button>
