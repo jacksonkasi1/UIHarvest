@@ -28,6 +28,8 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     // State
     const [files, setFiles] = useState<GeneratedFile[]>([])
     const [containerReady, setContainerReady] = useState(false)
+    // Shared terminal log state — fed by both useWebContainer and useRemixChat
+    const [containerLogs, setContainerLogs] = useState<string[]>([])
 
     // Hooks
     const { 
@@ -37,7 +39,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         setError, 
         phase, 
         statusMessage 
-    } = useWebContainer(jobId, setFiles, setSelectedFile, setContainerReady, containerReady)
+    } = useWebContainer(jobId, setFiles, setSelectedFile, setContainerReady, containerReady, setContainerLogs)
 
     const { 
         messages, 
@@ -47,13 +49,12 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         isThinking, 
         attachedImages, 
         setAttachedImages, 
-        containerLogs, 
         refreshKey, 
         setRefreshKey, 
         handleSendMessage, 
         handleStop, 
         chatInputRef 
-    } = useRemixChat(jobId, containerReady, setFiles)
+    } = useRemixChat(jobId, containerReady, setFiles, setContainerLogs)
 
     const isReady = phase === "ready"
     const isError = phase === "error"

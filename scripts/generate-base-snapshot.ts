@@ -13,8 +13,8 @@
  */
 
 // ** import core packages
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, copyFileSync } from "fs";
-import { join } from "path";
+import { mkdtempSync, writeFileSync, rmSync, copyFileSync, readdirSync, lstatSync, readlinkSync, unlinkSync, openSync, readSync, closeSync, chmodSync } from "fs";
+import { join, resolve, dirname } from "path";
 import { tmpdir } from "os";
 import { execSync } from "child_process";
 import { createHash } from "crypto";
@@ -150,6 +150,113 @@ const INDEX_CSS = `@tailwind base;
 `;
 
 // ════════════════════════════════════════════════════
+// SYMLINK RESOLVER
+// ════════════════════════════════════════════════════
+
+/**
+ * Returns true if the file at `path` is a text script (starts with #! or is
+ * UTF-8 text). Native binaries (ELF, Mach-O, PE) are detected by their magic
+ * bytes and excluded — we don't want to copy large native executables.
+ */
+function isTextScript(filePath: string): boolean {
+    const MAGIC_BYTES = 4;
+    const buf = Buffer.alloc(MAGIC_BYTES);
+    let fd: number;
+    try {
+        fd = openSync(filePath, "r");
+    } catch {
+        return false;
+    }
+    try {
+        const bytesRead = readSync(fd, buf, 0, MAGIC_BYTES, 0);
+        if (bytesRead < 2) return true; // empty / tiny file → treat as text
+
+        // Mach-O (macOS native binary): 0xCEFAEDFE / 0xCFFAEDFE / 0xFEEDFACE / 0xFEEDFACF
+        if (
+            (buf[0] === 0xce || buf[0] === 0xcf) && buf[1] === 0xfa && buf[2] === 0xed && buf[3] === 0xfe
+        ) return false;
+        if (buf[0] === 0xfe && buf[1] === 0xed && (buf[2] === 0xfa) && (buf[3] === 0xce || buf[3] === 0xcf)) return false;
+        // Fat Mach-O: 0xCAFEBABE
+        if (buf[0] === 0xca && buf[1] === 0xfe && buf[2] === 0xba && buf[3] === 0xbe) return false;
+        // ELF (Linux): 0x7F454C46
+        if (buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) return false;
+        // PE (Windows): 0x4D5A
+        if (buf[0] === 0x4d && buf[1] === 0x5a) return false;
+
+        return true;
+    } finally {
+        closeSync(fd);
+    }
+}
+
+/**
+ * @webcontainer/snapshot uses lstat and cannot handle symlinks.
+ * This recursively walks a directory and replaces every symlink with either:
+ *   - A real copy of the target (if it is a text/JS script)
+ *   - Nothing (deleted) if the target is a native binary — WebContainer
+ *     doesn't need native host binaries; it uses its own JS-based tooling.
+ */
+function resolveSymlinks(dir: string): void {
+    let entries: string[];
+    try {
+        entries = readdirSync(dir) as unknown as string[];
+    } catch {
+        return;
+    }
+
+    for (const name of entries) {
+        const fullPath = join(dir, name);
+        let stat;
+        try {
+            stat = lstatSync(fullPath);
+        } catch {
+            continue;
+        }
+
+        if (stat.isSymbolicLink()) {
+            let target: string;
+            try {
+                const raw = readlinkSync(fullPath);
+                target = resolve(dirname(fullPath), raw);
+            } catch {
+                unlinkSync(fullPath);
+                continue;
+            }
+
+            unlinkSync(fullPath);
+
+            // Follow symlink chains to the real file
+            let resolved = target;
+            try {
+                let targetStat = lstatSync(resolved);
+                while (targetStat.isSymbolicLink()) {
+                    resolved = resolve(dirname(resolved), readlinkSync(resolved));
+                    targetStat = lstatSync(resolved);
+                }
+
+                if (targetStat.isDirectory()) {
+                    // Symlink to a directory — skip (not needed for npm .bin usage)
+                    continue;
+                }
+
+                if (targetStat.isFile()) {
+                    // Only copy text/JS scripts — skip native binaries
+                    if (isTextScript(resolved)) {
+                        copyFileSync(resolved, fullPath);
+                        chmodSync(fullPath, targetStat.mode);
+                    }
+                    // If native binary: just leave deleted — WebContainer won't use it
+                }
+            } catch {
+                // Target doesn't exist or unreadable — skip
+            }
+        } else if (stat.isDirectory()) {
+            resolveSymlinks(fullPath);
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════
 // GENERATE VERSION HASH
 // ════════════════════════════════════════════════════
 
@@ -198,6 +305,12 @@ async function main() {
             stdio: "inherit",
         });
         console.log("✅ Dependencies installed\n");
+
+        // 3b. Resolve symlinks — @webcontainer/snapshot cannot serialize symlinks.
+        //     Replace every symlink in node_modules with a real copy of its target.
+        console.log("🔗 Resolving symlinks in node_modules...");
+        resolveSymlinks(join(tempDir, "node_modules"));
+        console.log("✅ Symlinks resolved\n");
 
         // 4. Generate binary snapshot
         console.log("📸 Generating binary snapshot...");

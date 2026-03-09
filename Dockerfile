@@ -1,12 +1,29 @@
-# ── Stage 1: Build web frontend ──────────────────────────────
+# ── Stage 1: Generate WebContainer base snapshot ─────────────
+FROM oven/bun:1 AS snapshot-builder
+WORKDIR /app
+
+# Need Node.js + npm for the snapshot builder (uses npm install internally)
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+COPY scripts/ ./scripts/
+RUN bun run scripts/generate-base-snapshot.ts
+
+# ── Stage 2: Build web frontend ──────────────────────────────
 FROM oven/bun:1 AS web-build
 WORKDIR /app/web
 COPY web/package.json web/bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY web/ ./
-RUN echo "Force rebuild 2" && bun run build
+# Copy the generated snapshot into web/public before building
+COPY --from=snapshot-builder /app/web/public/base-snapshot.bin ./public/base-snapshot.bin
+COPY --from=snapshot-builder /app/web/public/snapshot-version.json ./public/snapshot-version.json
+RUN bun run build
 
-# ── Stage 2: Runtime ─────────────────────────────────────────
+# ── Stage 3: Runtime ─────────────────────────────────────────
 FROM oven/bun:1
 
 # Install Playwright Chromium dependencies

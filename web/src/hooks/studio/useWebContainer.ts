@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import type { Dispatch, SetStateAction } from "react"
 import type { ContainerEvent } from "@/lib/webcontainer"
 import { preWarmContainer, mountAndRunWithSnapshot } from "@/lib/webcontainer"
 import type { GeneratedFile, RemixProgressEvent } from "@/types/studio"
@@ -8,11 +9,11 @@ export function useWebContainer(
     setFiles: (files: GeneratedFile[]) => void, 
     setSelectedFile: (file: string | null) => void,
     setContainerReady: (ready: boolean) => void,
-    containerReady: boolean
+    containerReady: boolean,
+    setContainerLogs: Dispatch<SetStateAction<string[]>>
 ) {
     const [isBootingContainer, setIsBootingContainer] = useState(false)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-    const [containerLogs, setContainerLogs] = useState<string[]>([])
     const [error, setError] = useState<string | null>(null)
 
     const [phase, setPhase] = useState("init")
@@ -35,7 +36,7 @@ export function useWebContainer(
             setError(event.message)
             setIsBootingContainer(false)
         }
-    }, [])
+    }, [setContainerLogs, setContainerReady])
 
     useEffect(() => {
         preWarmContainer(onContainerEvent).catch(console.error)
@@ -96,12 +97,10 @@ export function useWebContainer(
         containerReady,
         isBootingContainer,
         previewUrl,
-        containerLogs,
         error,
         setError,
         phase,
         progress,
         statusMessage,
-        setContainerLogs,
     }
 }

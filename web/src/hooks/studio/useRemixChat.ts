@@ -1,14 +1,19 @@
 import { useState, useEffect, useRef } from "react"
+import type { Dispatch, SetStateAction } from "react"
 import type { GeneratedFile, ChatMessage, ImageAttachment, ChatEvent } from "@/types/studio"
 import { writeFiles, installPackages } from "@/lib/webcontainer"
 
-export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (files: GeneratedFile[]) => void) {
+export function useRemixChat(
+    jobId: string,
+    containerReady: boolean,
+    setFiles: (files: GeneratedFile[]) => void,
+    setContainerLogs: Dispatch<SetStateAction<string[]>>,
+) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState("")
     const [isStreaming, setIsStreaming] = useState(false)
     const [isThinking, setIsThinking] = useState(false)
     const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([])
-    const [containerLogs, setContainerLogs] = useState<string[]>([])
     const [refreshKey, setRefreshKey] = useState(0)
 
     const abortControllerRef = useRef<AbortController | null>(null)
@@ -278,8 +283,6 @@ export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (
         isThinking,
         attachedImages,
         setAttachedImages,
-        containerLogs,
-        setContainerLogs,
         refreshKey,
         setRefreshKey,
         handleSendMessage,

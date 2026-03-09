@@ -2,8 +2,14 @@
  * snapshot-cache.ts
  *
  * IndexedDB-based cache for WebContainer binary snapshots.
- * Supports version-aware invalidation: when the scaffold deps change
- * and you redeploy, cached snapshots auto-purge on next visit.
+ *
+ * Two tiers:
+ *   1. "base-snapshot" store  — caches the pre-built base-snapshot.bin
+ *      downloaded from the server (node_modules already included).
+ *      Invalidated by version hash from /snapshot-version.json.
+ *
+ *   2. "snapshots" store      — caches per-job full-state snapshots taken
+ *      after the dev server starts for instant restore on repeat visits.
  */
 
 // ════════════════════════════════════════════════════
@@ -11,8 +17,9 @@
 // ════════════════════════════════════════════════════
 
 const DB_NAME = "wc-snapshot-cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "snapshots";
+const BASE_STORE_NAME = "base-snapshot";
 const MAX_CACHED_JOBS = 5;
 
 // ════════════════════════════════════════════════════
@@ -35,13 +42,18 @@ function openDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onupgradeneeded = () => {
+        request.onupgradeneeded = (event) => {
             const db = request.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 const store = db.createObjectStore(STORE_NAME, { keyPath: "jobId" });
                 store.createIndex("version", "version", { unique: false });
                 store.createIndex("lastAccessedAt", "lastAccessedAt", { unique: false });
             }
+            // v2: base snapshot store (keyed by version string)
+            if (!db.objectStoreNames.contains(BASE_STORE_NAME)) {
+                db.createObjectStore(BASE_STORE_NAME, { keyPath: "version" });
+            }
+            void event; // suppress unused variable lint
         };
 
         request.onsuccess = () => resolve(request.result);
@@ -252,5 +264,80 @@ export async function fetchSnapshotVersion(): Promise<string> {
         return data.version || "unknown";
     } catch {
         return "unknown";
+    }
+}
+
+// ════════════════════════════════════════════════════
+// BASE SNAPSHOT CACHE (pre-built server-side snapshot)
+// ════════════════════════════════════════════════════
+
+interface CachedBaseSnapshot {
+    version: string;
+    data: ArrayBuffer;
+    cachedAt: number;
+}
+
+/**
+ * Load the pre-built base snapshot from IndexedDB.
+ * Returns null if not cached or version doesn't match.
+ */
+export async function loadBaseSnapshot(version: string): Promise<Uint8Array | null> {
+    try {
+        const db = await openDB();
+        return new Promise<Uint8Array | null>((resolve) => {
+            const tx = db.transaction(BASE_STORE_NAME, "readonly");
+            const store = tx.objectStore(BASE_STORE_NAME);
+            const request = store.get(version);
+
+            request.onsuccess = () => {
+                const entry = request.result as CachedBaseSnapshot | undefined;
+                db.close();
+                if (!entry) {
+                    resolve(null);
+                    return;
+                }
+                console.log(`[snapshot-cache] Base snapshot cache HIT (v: ${version})`);
+                resolve(new Uint8Array(entry.data));
+            };
+
+            request.onerror = () => {
+                db.close();
+                resolve(null);
+            };
+        });
+    } catch (err) {
+        console.warn("[snapshot-cache] Failed to load base snapshot:", (err as Error).message);
+        return null;
+    }
+}
+
+/**
+ * Save the pre-built base snapshot to IndexedDB.
+ * Automatically evicts all other versions to keep storage clean.
+ */
+export async function saveBaseSnapshot(version: string, data: ArrayBuffer): Promise<void> {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(BASE_STORE_NAME, "readwrite");
+        const store = tx.objectStore(BASE_STORE_NAME);
+
+        // Clear all previous versions first
+        store.clear();
+
+        const entry: CachedBaseSnapshot = {
+            version,
+            data,
+            cachedAt: Date.now(),
+        };
+        store.put(entry);
+
+        await new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+        console.log(`[snapshot-cache] Base snapshot saved (v: ${version}, ${(data.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+    } catch (err) {
+        console.warn("[snapshot-cache] Failed to save base snapshot:", (err as Error).message);
     }
 }

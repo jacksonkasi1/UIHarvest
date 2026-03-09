@@ -11,6 +11,7 @@
     "start:server": "bun run build:web && bun run src/serve.ts",
     "dev": "concurrently \"bun run src/serve.ts\" \"bun run --cwd web dev --host 0.0.0.0 --port 5173\"",
     "web": "concurrently \"bun run src/serve.ts\" \"bun run --cwd web dev --host 0.0.0.0 --port 5173\"",
+    "generate:snapshot": "bun run scripts/generate-base-snapshot.ts",
     "docker:build": "docker build -t uiharvest .",
     "docker:run": "docker run -p 8080:8080 --env-file .env uiharvest",
     "deploy": "bash deploy.sh"
