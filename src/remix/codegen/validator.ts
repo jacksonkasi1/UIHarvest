@@ -119,11 +119,17 @@ function countUnescaped(code: string, char: string): number {
 
     for (let i = 0; i < code.length; i++) {
         const c = code[i];
-        const prev = i > 0 ? code[i - 1] : "";
         const next = i < code.length - 1 ? code[i + 1] : "";
 
-        // Skip escaped characters
-        if (prev === "\\") continue;
+        // Skip escaped characters: count consecutive backslashes before this position.
+        // An odd number means the current char is escaped; even means the backslashes
+        // are themselves escaped and the current char is NOT escaped.
+        if (i > 0) {
+            let backslashCount = 0;
+            let j = i - 1;
+            while (j >= 0 && code[j] === "\\") { backslashCount++; j--; }
+            if (backslashCount % 2 !== 0) continue;
+        }
 
         // Handle newlines — reset line comment
         if (c === "\n") {
@@ -182,9 +188,14 @@ function repairLineStrings(line: string): string {
 
     for (let i = 0; i < line.length; i++) {
         const c = line[i];
-        const prev = i > 0 ? line[i - 1] : "";
 
-        if (prev === "\\") continue;
+        // Correctly handle escaped characters (e.g. \\ before a quote)
+        if (i > 0) {
+            let backslashCount = 0;
+            let j = i - 1;
+            while (j >= 0 && line[j] === "\\") { backslashCount++; j--; }
+            if (backslashCount % 2 !== 0) continue;
+        }
 
         if (c === "`" && !inSingle && !inDouble) {
             inTemplate = !inTemplate;
@@ -275,10 +286,15 @@ function countBrackets(code: string): {
 
     for (let i = 0; i < code.length; i++) {
         const c = code[i];
-        const prev = i > 0 ? code[i - 1] : "";
         const next = i < code.length - 1 ? code[i + 1] : "";
 
-        if (prev === "\\" && !inBlockComment && !inLineComment) continue;
+        // Correctly handle escaped characters (e.g. \\ before a quote or bracket)
+        if (i > 0) {
+            let backslashCount = 0;
+            let j = i - 1;
+            while (j >= 0 && code[j] === "\\") { backslashCount++; j--; }
+            if (backslashCount % 2 !== 0) continue;
+        }
 
         if (c === "\n") {
             inLineComment = false;

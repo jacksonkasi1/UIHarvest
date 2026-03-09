@@ -42,9 +42,9 @@ export class GeminiClient {
     }
     this.ai = new GoogleGenAI({ apiKey });
     this.models = {
-      vision: process.env.GEMINI_MODEL_VISION || "gemini-3.1-pro-preview",
-      analysis: process.env.GEMINI_MODEL_ANALYSIS || "gemini-3.1-pro-preview",
-      codegen: process.env.GEMINI_MODEL_CODEGEN || "gemini-3.1-pro-preview",
+      vision: process.env.GEMINI_MODEL_VISION || "gemini-2.5-pro-preview-06-05",
+      analysis: process.env.GEMINI_MODEL_ANALYSIS || "gemini-2.5-pro-preview-06-05",
+      codegen: process.env.GEMINI_MODEL_CODEGEN || "gemini-2.5-pro-preview-06-05",
     };
   }
 

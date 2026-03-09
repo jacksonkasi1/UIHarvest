@@ -7,7 +7,6 @@ import type { RemixSpec, GeneratedFile } from "../types.js";
 import { GeminiClient } from "../../gemini-client.js";
 
 // ** import apis
-// ** import apis
 import { buildSystemPrompt, buildPagePrompt, buildIterationPrompt, buildPlannerPrompt } from "./system-prompt.js";
 import { generateScaffold } from "./scaffold.js";
 import { parseGeneratedFiles, mergeFiles } from "./parser.js";
