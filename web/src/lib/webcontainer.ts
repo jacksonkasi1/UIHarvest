@@ -38,6 +38,9 @@ let _bootPromise: Promise<WebContainer> | null = null
 let _preWarmPromise: Promise<void> | null = null
 let _preWarmed = false
 let _snapshotVersion: string = "unknown"
+
+// Mutex to serialize package installations
+let _installMutex: Promise<any> = Promise.resolve(true)
 let _cancelPreWarm = false
 let _preWarmInstallProcess: any = null
 
@@ -417,6 +420,15 @@ async function _startDevServer(
             onEvent({ type: "server-ready", message: `Server ready on port ${port}`, url, port })
             resolve(url)
         })
+
+        // Also catch if the process crashes before or after server-ready
+        devProcess.exit.then((code) => {
+            if (code !== 0) {
+                onEvent({ type: "error", message: `Vite server crashed (exit code ${code}). Try editing the code to fix syntax errors.` })
+                // If it crashed before server-ready, we should clear the timeout
+                clearTimeout(timeout)
+            }
+        }).catch(() => {})
     })
 
     // Save snapshot to IndexedDB in background
@@ -456,15 +468,11 @@ async function _saveSnapshotInBackground(
 export async function writeFiles(files: GeneratedFile[], onEvent?: ContainerEventHandler): Promise<void> {
     const wc = await getInstance()
 
-    for (const file of files) {
-        const dir = file.path.substring(0, file.path.lastIndexOf("/"))
-        if (dir) {
-            await wc.fs.mkdir(dir, { recursive: true })
-        }
-        await wc.fs.writeFile(file.path, file.content)
-    }
+    // Using atomic mount to avoid Vite HMR race conditions from sequential writes
+    const tree = filesToTree(files)
+    await wc.mount(tree)
 
-    onEvent?.({ type: "mount", message: `Updated ${files.length} files` })
+    onEvent?.({ type: "mount", message: `Updated ${files.length} files atomically` })
 }
 
 /**
@@ -475,6 +483,12 @@ export async function installPackages(
     onEvent?: ContainerEventHandler
 ): Promise<boolean> {
     if (packages.length === 0) return true
+
+    // Wait for any ongoing install to finish before starting a new one
+    const previousMutex = _installMutex
+    let releaseMutex: () => void
+    _installMutex = new Promise(resolve => { releaseMutex = resolve as any })
+    await previousMutex
 
     try {
         const wc = await getInstance()
@@ -527,6 +541,8 @@ export async function installPackages(
         const message = err instanceof Error ? err.message : String(err)
         onEvent?.({ type: "error", message: `Package install error: ${message}` })
         return false
+    } finally {
+        releaseMutex!()
     }
 }
 
