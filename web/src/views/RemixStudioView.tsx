@@ -60,12 +60,40 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
 
     const handleRefreshPreview = () => setRefreshKey(prev => prev + 1)
     
+    const pendingEditsRef = useRef(new Map<string, string>())
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    
     const handleFileEdit = (path: string, newContent: string) => {
+        // Update local React state
         setFiles(prev => prev.map(f => (f.path === path ? { ...f, content: newContent } : f)))
+        
+        // Track all pending edits across different files
+        pendingEditsRef.current.set(path, newContent)
+        
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-        saveTimeoutRef.current = setTimeout(() => {
-            // Write files to webcontainer
+        
+        saveTimeoutRef.current = setTimeout(async () => {
+            const edits = Array.from(pendingEditsRef.current.entries())
+            pendingEditsRef.current.clear()
+
+            // 1. Sync to WebContainer
+            if (containerReady) {
+                const { writeFiles } = await import("@/lib/webcontainer")
+                writeFiles(edits.map(([p, c]) => ({ path: p, content: c }))).catch(console.error)
+            }
+            
+            // 2. Persist to backend (Durable manual edits)
+            for (const [p, c] of edits) {
+                try {
+                    await fetch(`/api/remix/${jobId}/files`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ path: p, content: c })
+                    })
+                } catch (err) {
+                    console.error(`[Studio] Failed to persist file edit to backend for ${p}:`, err)
+                }
+            }
         }, 1000)
     }
 

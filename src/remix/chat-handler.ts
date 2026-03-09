@@ -54,12 +54,15 @@ function getConversation(jobId: string): ConversationMessage[] {
     return conversationStore.get(jobId)!;
 }
 
-function addToConversation(jobId: string, msg: ConversationMessage): void {
+function addToConversation(jobId: string, msg: ConversationMessage, deps?: ChatHandlerDeps): void {
     const conv = getConversation(jobId);
     conv.push(msg);
     // Keep only last N messages
     if (conv.length > MAX_CONVERSATION_HISTORY) {
         conv.splice(0, conv.length - MAX_CONVERSATION_HISTORY);
+    }
+    if (deps?.onConversationUpdated) {
+        deps.onConversationUpdated(conv);
     }
 }
 
@@ -244,6 +247,7 @@ export interface ChatHandlerDeps {
     files: GeneratedFile[];
     codegenSystemPrompt: string;
     onFilesUpdated: (files: GeneratedFile[]) => void;
+    onConversationUpdated: (messages: ConversationMessage[]) => void;
 }
 
 /**
@@ -265,7 +269,7 @@ export async function handleChatMessage(
         role: "user",
         content: userPrompt,
         timestamp: Date.now(),
-    });
+    }, deps);
 
     try {
         // Step 1: Classify intent
@@ -413,6 +417,14 @@ async function handleConversation(
 
             sendSSE(res, { type: "text", content: fullText, partial: false });
             console.log(`[chat] Streamed ${fullText.length} chars`);
+            
+            // Record assistant reply in history
+            addToConversation(deps.jobId, {
+                role: "assistant",
+                content: fullText,
+                timestamp: Date.now(),
+            }, deps);
+            
             return;
         }
 
@@ -443,6 +455,13 @@ async function handleConversation(
                 }
                 sendSSE(res, { type: "text", content: response.trim(), partial: false });
                 console.log(`[chat] Non-streaming fallback: ${response.trim().length} chars`);
+                
+                // Record assistant reply in history
+                addToConversation(deps.jobId, {
+                    role: "assistant",
+                    content: response.trim(),
+                    timestamp: Date.now(),
+                }, deps);
             } else {
                 console.error("[chat] Non-streaming also returned empty");
                 sendSSE(res, {
@@ -562,7 +581,7 @@ async function handleCodeChange(
             content: `Code change: ${summary}`,
             timestamp: Date.now(),
             editedFiles: changedPaths,
-        });
+        }, deps);
 
         if (signal.aborted) return;
 

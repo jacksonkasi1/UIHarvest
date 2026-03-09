@@ -105,6 +105,11 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                 localStorage.removeItem("uih_jobId");
             }
 
+            // Also delete WebContainer snapshot cache
+            import('@/lib/snapshot-cache').then(({ deleteSnapshot }) => {
+                deleteSnapshot(jobId).catch(console.error);
+            });
+
             fetchJobs();
         } catch (err) {
             console.error("Failed to delete job", err);

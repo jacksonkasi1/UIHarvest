@@ -161,16 +161,22 @@ export class RemixManager {
      */
     subscribe(
         id: string,
-        listener: (event: RemixProgressEvent) => void
+        listener: (event: RemixProgressEvent) => void,
+        skipPastEvents: boolean = false
     ): (() => void) | null {
         const job = this.jobs.get(id);
         if (!job) return null;
 
         job.listeners.add(listener);
 
-        // Send buffered events
-        for (const event of job.events) {
-            listener(event);
+        // Send buffered events only if we aren't recovering/skipping
+        if (!skipPastEvents) {
+            for (const event of job.events) {
+                listener(event);
+            }
+        } else if (job.events.length > 0) {
+            // Always send at least the most recent event to establish current state
+            listener(job.events[job.events.length - 1]);
         }
 
         return () => {
@@ -242,12 +248,51 @@ export class RemixManager {
                     console.error("[RemixManager] Firestore file update failed:", err.message)
                 );
             },
+            onConversationUpdated: (messages) => {
+                // Write-through: persist conversation history
+                jobStore.save(job, messages).catch(err =>
+                    console.error("[RemixManager] Firestore conversation update failed:", err.message)
+                );
+            },
         };
     }
 
     // ════════════════════════════════════════════════════
     // PRIVATE
     // ════════════════════════════════════════════════════
+
+    public async updateFile(id: string, path: string, content: string): Promise<boolean> {
+        const job = this.jobs.get(id);
+        if (!job) return false;
+
+        const fileIndex = job.files.findIndex(f => f.path === path);
+        if (fileIndex >= 0) {
+            job.files[fileIndex].content = content;
+        } else {
+            job.files.push({ path, content });
+        }
+
+        // Also update the generator's internal files array so future AI iterations have the context
+        const generator = this.generators.get(id);
+        if (generator) {
+            const genFiles = generator.getFiles();
+            const genFileIndex = genFiles.findIndex(f => f.path === path);
+            if (genFileIndex >= 0) {
+                genFiles[genFileIndex].content = content;
+            } else {
+                genFiles.push({ path, content });
+            }
+        }
+
+        // Persist to backend
+        try {
+            await jobStore.save(job);
+            return true;
+        } catch (err) {
+            console.error(`[RemixManager] Failed to persist file edit for ${id}:`, err);
+            return false;
+        }
+    }
 
     private emit(job: RemixJob, event: RemixProgressEvent): void {
         job.events.push(event);

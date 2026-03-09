@@ -376,9 +376,12 @@ export function startServer(
     res.flushHeaders();
 
     // Send a keep-alive comment every 15 seconds
-    const keepAlive = setInterval(() => {
-      res.write(": keep-alive\n\n");
-    }, 15_000);
+    let keepAlive: NodeJS.Timeout | null = null;
+    if (job.status !== "done" && job.status !== "error") {
+      keepAlive = setInterval(() => {
+        res.write(": keep-alive\n\n");
+      }, 15_000);
+    }
 
     // Reconnect signal before GCR 60-min timeout
     const reconnectTimer = setTimeout(() => {
@@ -389,12 +392,16 @@ export function startServer(
 
     const listener = (event: ProgressEvent) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (event.phase === "done" || event.phase === "error") {
+        if (keepAlive) clearInterval(keepAlive);
+        clearTimeout(reconnectTimer);
+      }
     };
 
     const unsubscribe = jobManager.subscribe(job.id, listener);
 
     req.on("close", () => {
-      clearInterval(keepAlive);
+      if (keepAlive) clearInterval(keepAlive);
       clearTimeout(reconnectTimer);
       if (unsubscribe) unsubscribe();
     });
@@ -508,55 +515,109 @@ export function startServer(
   });
 
   app.get("/api/remix/:id/progress", authMiddleware, async (req, res) => {
-    // Try memory first, then Firestore (cold-start recovery)
-    let job = remixManager.get(req.params.id);
-    if (!job) {
-      job = await remixManager.getOrHydrate(req.params.id);
+    try {
+      // Try memory first, then Firestore (cold-start recovery)
+      let job = remixManager.get(req.params.id);
+      if (!job) {
+        job = await remixManager.getOrHydrate(req.params.id);
+      }
+      if (!job) {
+        res.status(404).json({ error: "Remix job not found" });
+        return;
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      // Reconnect strategy: if client passes a header or query string, we skip past events.
+      const skipPast = req.query.recover === "true" || job.status === "done";
+
+      // Stop keep-alive automatically if the job is already done to save resources
+      let keepAlive: NodeJS.Timeout | null = null;
+      if (job.status !== "done") {
+        keepAlive = setInterval(() => {
+          res.write(": keep-alive\n\n");
+        }, 15_000);
+      }
+
+      const listener = (event: RemixProgressEvent) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+        // If the job reaches a final phase, close the keep-alive so Cloud Run can scale down
+        if (event.phase === "ready" || event.phase === "error") {
+          if (keepAlive) clearInterval(keepAlive);
+        }
+      };
+
+      const unsubscribe = remixManager.subscribe(job.id, listener, skipPast);
+
+      req.on("close", () => {
+        if (keepAlive) clearInterval(keepAlive);
+        if (unsubscribe) unsubscribe();
+      });
+    } catch (err) {
+      console.error("[server] /progress error:", (err as Error).message);
+      if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
     }
-    if (!job) {
-      res.status(404).json({ error: "Remix job not found" });
-      return;
-    }
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
-    const keepAlive = setInterval(() => {
-      res.write(": keep-alive\n\n");
-    }, 15_000);
-
-    const listener = (event: RemixProgressEvent) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
-
-    const unsubscribe = remixManager.subscribe(job.id, listener);
-
-    req.on("close", () => {
-      clearInterval(keepAlive);
-      if (unsubscribe) unsubscribe();
-    });
   });
 
   app.get("/api/remix/:id/files", authMiddleware, async (req, res) => {
-    // Try memory first, then Firestore (cold-start recovery)
-    let job = remixManager.get(req.params.id);
-    if (!job) {
-      job = await remixManager.getOrHydrate(req.params.id);
-    }
-    if (!job) {
-      res.status(404).json({ error: "Remix job not found" });
-      return;
-    }
+    try {
+      // Try memory first, then Firestore (cold-start recovery)
+      let job = remixManager.get(req.params.id);
+      if (!job) {
+        job = await remixManager.getOrHydrate(req.params.id);
+      }
+      if (!job) {
+        res.status(404).json({ error: "Remix job not found" });
+        return;
+      }
 
-    if (job.status !== "done" && job.phase !== "ready") {
-      res.status(202).json({ status: job.status, phase: job.phase, message: "Still generating" });
-      return;
-    }
+      if (job.status !== "done" && job.phase !== "ready") {
+        res.status(202).json({ status: job.status, phase: job.phase, message: "Still generating" });
+        return;
+      }
 
-    res.json({ files: job.files, spec: job.result?.spec });
+      res.json({ files: job.files, spec: job.result?.spec });
+    } catch (err) {
+      console.error("[server] /files error:", (err as Error).message);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/remix/:id/files", authMiddleware, async (req, res) => {
+    try {
+      const { path, content } = req.body;
+      if (!path || typeof content !== "string") {
+        res.status(400).json({ error: "path and content are required" });
+        return;
+      }
+
+      // Hydrate before updating in case of cold start
+      let job = remixManager.get(req.params.id);
+      if (!job) {
+        job = await remixManager.getOrHydrate(req.params.id);
+      }
+      if (!job) {
+        res.status(404).json({ error: "Job not found" });
+        return;
+      }
+
+      // This updates the file in memory and persists to Firestore.
+      // Handles manual edits from the Monaco editor in the frontend.
+      const success = await remixManager.updateFile(req.params.id, path, content);
+      if (!success) {
+        res.status(500).json({ error: "Failed to update file" });
+        return;
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[server] POST /files error:", (err as Error).message);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/remix/:id/iterate", authMiddleware, async (req, res) => {
@@ -580,74 +641,79 @@ export function startServer(
 
   // ── Streaming Chat API (SSE) ───────────────────────────────────────────────
   app.post("/api/remix/:id/chat", authMiddleware, async (req, res) => {
-    const { prompt, images, mode } = req.body;
-    if (!prompt || typeof prompt !== "string") {
-      res.status(400).json({ error: "prompt is required" });
-      return;
-    }
-
-    // Hydrate from Firestore on cold-start (memory miss)
-    if (!remixManager.get(req.params.id)) {
-      await remixManager.getOrHydrate(req.params.id);
-    }
-    const chatDeps = remixManager.getChatDeps(req.params.id);
-    if (!chatDeps) {
-      res.status(404).json({ error: "Job not found or not ready" });
-      return;
-    }
-
-    // SSE headers
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
-    // Send initial SSE comment to prime the connection
-    res.write(": connected\n\n");
-    if (typeof (res as any).flush === "function") (res as any).flush();
-
-    // Keepalive to prevent proxy timeout
-    const keepAlive = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write(": keep-alive\n\n");
-        if (typeof (res as any).flush === "function") (res as any).flush();
-      }
-    }, 15_000);
-
-    // Abort controller — only truly abort when client disconnects AFTER we've
-    // started streaming (not from Cloud Run's premature 'close' event on connect).
-    const controller = new AbortController();
-    req.on("close", () => {
-      // Due to Cloud Run reverse proxy quirks, 'close' may fire prematurely
-      // right after reading the POST body. We NEVER abort the backend generation layer.
-      // If the client truly disconnects, the connection will drop but the generation
-      // finishes gracefully and saves to Firestore.
-      clearInterval(keepAlive);
-    });
-
-    const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
-
     try {
-      await handleChatMessage(
-        res,
-        prompt,
-        imageAttachments,
-        mode,
-        chatDeps,
-        controller.signal
-      );
-    } catch (err) {
-      console.error("[chat-endpoint] Error:", (err as Error).message);
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: "error", error: (err as Error).message })}\n\n`);
-        if (typeof (res as any).flush === "function") (res as any).flush();
+      const { prompt, images, mode } = req.body;
+      if (!prompt || typeof prompt !== "string") {
+        res.status(400).json({ error: "prompt is required" });
+        return;
       }
-    }
 
-    clearInterval(keepAlive);
-    if (!res.writableEnded) {
-      res.end();
+      // Hydrate from Firestore on cold-start (memory miss)
+      if (!remixManager.get(req.params.id)) {
+        await remixManager.getOrHydrate(req.params.id);
+      }
+      const chatDeps = remixManager.getChatDeps(req.params.id);
+      if (!chatDeps) {
+        res.status(404).json({ error: "Job not found or not ready" });
+        return;
+      }
+
+      // SSE headers
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      // Send initial SSE comment to prime the connection
+      res.write(": connected\n\n");
+      if (typeof (res as any).flush === "function") (res as any).flush();
+
+      // Keepalive to prevent proxy timeout
+      const keepAlive = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(": keep-alive\n\n");
+          if (typeof (res as any).flush === "function") (res as any).flush();
+        }
+      }, 15_000);
+
+      // Abort controller — only truly abort when client disconnects AFTER we've
+      // started streaming (not from Cloud Run's premature 'close' event on connect).
+      const controller = new AbortController();
+      req.on("close", () => {
+        // Due to Cloud Run reverse proxy quirks, 'close' may fire prematurely
+        // right after reading the POST body. We NEVER abort the backend generation layer.
+        // If the client truly disconnects, the connection will drop but the generation
+        // finishes gracefully and saves to Firestore.
+        clearInterval(keepAlive);
+      });
+
+      const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
+
+      try {
+        await handleChatMessage(
+          res,
+          prompt,
+          imageAttachments,
+          mode,
+          chatDeps,
+          controller.signal
+        );
+      } catch (err) {
+        console.error("[chat-endpoint] Error:", (err as Error).message);
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: "error", error: (err as Error).message })}\n\n`);
+          if (typeof (res as any).flush === "function") (res as any).flush();
+        }
+      }
+
+      clearInterval(keepAlive);
+      if (!res.writableEnded) {
+        res.end();
+      }
+    } catch (err) {
+      console.error("[server] /chat error:", (err as Error).message);
+      if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
     }
   });
 

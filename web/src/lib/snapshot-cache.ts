@@ -148,6 +148,28 @@ export async function loadSnapshot(
 }
 
 /**
+ * Delete a specific snapshot by jobId.
+ */
+export async function deleteSnapshot(jobId: string): Promise<void> {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+
+        store.delete(jobId);
+
+        await new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+        db.close();
+        console.log(`[snapshot-cache] Deleted snapshot for job ${jobId}`);
+    } catch (err) {
+        console.warn(`[snapshot-cache] Failed to delete snapshot for ${jobId}:`, (err as Error).message);
+    }
+}
+
+/**
  * Purge all snapshots that don't match the current version.
  */
 export async function purgeStaleSnapshots(currentVersion: string): Promise<void> {
