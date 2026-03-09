@@ -5,6 +5,9 @@ import { Firestore, FieldValue } from "@google-cloud/firestore";
 import type { RemixJob, RemixResult } from "../remix/types.js";
 import type { ConversationMessage } from "../remix/chat-handler.js";
 
+// ** import constants
+import { firestoreConfig } from "../config.js";
+
 // ════════════════════════════════════════════════════
 // FIRESTORE JOB STORE
 // Persists RemixJob state so jobs survive Cloud Run scale-to-zero.
@@ -35,9 +38,7 @@ class JobStore {
     constructor() {
         // Only enable if running on Cloud Run (has GCP credentials)
         // or FIRESTORE_PROJECT_ID env var is explicitly set
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT
-            || process.env.GCLOUD_PROJECT
-            || process.env.FIRESTORE_PROJECT_ID;
+        const projectId = firestoreConfig.projectId;
 
         if (projectId) {
             try {

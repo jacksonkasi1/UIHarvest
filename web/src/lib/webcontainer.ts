@@ -29,6 +29,12 @@ export interface ContainerEvent {
     port?: number
 }
 
+export interface FileWriteResult {
+    path: string
+    success: boolean
+    error?: string
+}
+
 export type ContainerEventHandler = (event: ContainerEvent) => void
 
 // ════════════════════════════════════════════════════
@@ -377,13 +383,62 @@ async function _saveSnapshotInBackground(
  * Write updated files to the already-running WebContainer.
  */
 export async function writeFiles(files: GeneratedFile[], onEvent?: ContainerEventHandler): Promise<void> {
+    const results = await updateFiles(files, onEvent)
+    const failed = results.filter((result) => !result.success)
+    if (failed.length > 0) {
+        throw new Error(`Failed to update ${failed.length} files`)
+    }
+}
+
+async function ensureParentDirs(wc: WebContainer, filePath: string): Promise<void> {
+    const normalized = filePath.replace(/^\/+/, "")
+    const parts = normalized.split("/")
+    if (parts.length <= 1) return
+
+    let current = ""
+    for (let i = 0; i < parts.length - 1; i++) {
+        const segment = parts[i]
+        if (!segment) continue
+        current = current ? `${current}/${segment}` : segment
+        try {
+            await wc.fs.mkdir(current)
+        } catch {
+            // Directory likely already exists.
+        }
+    }
+}
+
+export async function updateFiles(
+    files: GeneratedFile[],
+    onEvent?: ContainerEventHandler
+): Promise<FileWriteResult[]> {
     const wc = await getInstance()
+    const results: FileWriteResult[] = []
 
-    // Using atomic mount to avoid Vite HMR race conditions from sequential writes
-    const tree = filesToTree(files)
-    await wc.mount(tree)
+    for (const file of files) {
+        try {
+            await ensureParentDirs(wc, file.path)
+            await wc.fs.writeFile(file.path, file.content)
+            results.push({ path: file.path, success: true })
+            onEvent?.({ type: "mount", message: `Updated ${file.path}` })
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err)
+            results.push({ path: file.path, success: false, error: message })
+            onEvent?.({ type: "error", message: `Failed to update ${file.path}: ${message}` })
+        }
+    }
 
-    onEvent?.({ type: "mount", message: `Updated ${files.length} files atomically` })
+    const successCount = results.filter((result) => result.success).length
+    const failureCount = results.length - successCount
+    onEvent?.({
+        type: failureCount > 0 ? "error" : "mount",
+        message:
+            failureCount > 0
+                ? `Updated ${successCount}/${results.length} files (${failureCount} failed)`
+                : `Updated ${successCount} files`,
+    })
+
+    return results
 }
 
 /**

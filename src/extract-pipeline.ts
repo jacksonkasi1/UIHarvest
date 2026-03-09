@@ -15,6 +15,9 @@ import { GeminiClient } from "./gemini-client.js";
 import { runVisionLoop } from "./vision-loop.js";
 import { MemoryGenerator } from "./memory/generator.js";
 
+// ** import constants
+import { extractConfig } from "./config.js";
+
 // ════════════════════════════════════════════════════
 // TYPES
 // ════════════════════════════════════════════════════
@@ -517,8 +520,8 @@ export async function runExtraction(
         const cpuCount = os.cpus().length;
         const memGb = os.totalmem() / 1024 ** 3;
         let concurrency = Math.max(1, Math.min(cpuCount, Math.floor(memGb / 2)));
-        if (process.env.MAX_CONCURRENCY)
-            concurrency = parseInt(process.env.MAX_CONCURRENCY, 10);
+        if (extractConfig.maxConcurrency > 0)
+            concurrency = extractConfig.maxConcurrency;
 
         emit({
             phase: "init",

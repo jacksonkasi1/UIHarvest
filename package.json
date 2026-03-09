@@ -1,7 +1,13 @@
 {
   "name": "ui-harvest",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tooling/*"
+  ],
   "scripts": {
     "start": "bun run src/main.ts",
     "extract": "bun run src/main.ts",
@@ -11,10 +17,16 @@
     "start:server": "bun run build:web && bun run src/serve.ts",
     "dev": "concurrently \"bun run src/serve.ts\" \"bun run --cwd web dev --host 0.0.0.0 --port 5173\"",
     "web": "concurrently \"bun run src/serve.ts\" \"bun run --cwd web dev --host 0.0.0.0 --port 5173\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "generate:snapshot": "bun run scripts/generate-base-snapshot.ts",
     "docker:build": "docker build -t uiharvest .",
     "docker:run": "docker run -p 8080:8080 --env-file .env uiharvest",
-    "deploy": "bash deploy.sh"
+    "deploy": "bash deploy.sh",
+    "turbo:build": "turbo build",
+    "turbo:dev": "turbo dev",
+    "turbo:test": "turbo test",
+    "turbo:typecheck": "turbo typecheck"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.43",
@@ -37,6 +49,7 @@
     "bun-types": "^1.1.0",
     "concurrently": "^9.2.1",
     "shadcn": "^4.0.0",
+    "turbo": "^2.5.8",
     "typescript": "^5.6.0",
     "vitest": "^4.0.18"
   }

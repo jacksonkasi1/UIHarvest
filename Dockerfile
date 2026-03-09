@@ -15,6 +15,7 @@ RUN bun run scripts/generate-base-snapshot.ts
 # ── Stage 2: Build web frontend ──────────────────────────────
 FROM oven/bun:1 AS web-build
 WORKDIR /app/web
+ARG CACHEBUST=1
 COPY web/package.json web/bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY web/ ./

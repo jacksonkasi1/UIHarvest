@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react"
 import type { Dispatch, SetStateAction } from "react"
 import type { GeneratedFile, ChatMessage, ImageAttachment, ChatEvent } from "@/types/studio"
-import { writeFiles, installPackages } from "@/lib/webcontainer"
+import { updateFiles, installPackages } from "@/lib/webcontainer"
+import { apiRoutes } from "@/config/api"
 
 export function useRemixChat(
     jobId: string,
@@ -18,6 +19,40 @@ export function useRemixChat(
 
     const abortControllerRef = useRef<AbortController | null>(null)
     const chatInputRef = useRef<HTMLInputElement>(null)
+    const pendingFileBatchesRef = useRef<GeneratedFile[][]>([])
+
+    const applyFileBatch = async (batch: GeneratedFile[]) => {
+        const results = await updateFiles(batch, (wEvent) => {
+            setContainerLogs((prev) => [...prev.slice(-200), `[${wEvent.type}] ${wEvent.message}`])
+        })
+
+        const failed = results.filter((result) => !result.success)
+        if (failed.length > 0) {
+            throw new Error(`Failed to write ${failed.length} files`)
+        }
+    }
+
+    useEffect(() => {
+        if (!containerReady || pendingFileBatchesRef.current.length === 0) return
+
+        const flush = async () => {
+            const pending = [...pendingFileBatchesRef.current]
+            pendingFileBatchesRef.current = []
+            for (const batch of pending) {
+                try {
+                    await applyFileBatch(batch)
+                } catch (err) {
+                    setContainerLogs((prev) => [
+                        ...prev.slice(-200),
+                        `[error] Deferred file update failed: ${(err as Error).message}`,
+                    ])
+                    pendingFileBatchesRef.current.push(batch)
+                }
+            }
+        }
+
+        void flush()
+    }, [containerReady])
 
     // Persist messages
     useEffect(() => {
@@ -78,7 +113,7 @@ export function useRemixChat(
                 }))
             }
 
-            const res = await fetch(`/api/remix/${jobId}/chat`, {
+            const res = await fetch(apiRoutes.remixChat(jobId), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -213,11 +248,22 @@ export function useRemixChat(
 
             case "tool_end":
                 if (event.files) {
-                    setFiles(event.files)
+                    const toolFiles = event.files
+                    setFiles(toolFiles)
                     if (containerReady) {
-                        writeFiles(event.files, (wEvent) => {
-                            setContainerLogs((prev) => [...prev.slice(-200), `[${wEvent.type}] ${wEvent.message}`])
-                        }).catch(console.error)
+                        applyFileBatch(toolFiles).catch((err) => {
+                            setContainerLogs((prev) => [
+                                ...prev.slice(-200),
+                                `[error] File update failed, queued for retry: ${(err as Error).message}`,
+                            ])
+                            pendingFileBatchesRef.current.push(toolFiles)
+                        })
+                    } else {
+                        pendingFileBatchesRef.current.push(toolFiles)
+                        setContainerLogs((prev) => [
+                            ...prev.slice(-200),
+                            `[mount] Container not ready, queued ${toolFiles.length} files for retry`,
+                        ])
                     }
                 }
                 if (event.packages && event.packages.length > 0 && containerReady) {

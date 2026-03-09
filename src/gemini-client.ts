@@ -3,6 +3,9 @@ import "dotenv/config";
 // ** import core packages
 import { GoogleGenAI } from "@google/genai";
 
+// ** import constants
+import { aiConfig } from "./config.js";
+
 // ════════════════════════════════════════════════════
 // TYPES
 // ════════════════════════════════════════════════════
@@ -36,20 +39,20 @@ export class GeminiClient {
   private callCount = 0;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY || "";
+    const apiKey = aiConfig.apiKey;
     if (!apiKey) {
       console.log("⚠️  No GOOGLE_CLOUD_API_KEY set — Gemini vision pipeline will be skipped");
     }
     this.ai = new GoogleGenAI({ apiKey });
     this.models = {
-      vision: process.env.GEMINI_MODEL_VISION || "gemini-2.5-pro-preview-06-05",
-      analysis: process.env.GEMINI_MODEL_ANALYSIS || "gemini-2.5-pro-preview-06-05",
-      codegen: process.env.GEMINI_MODEL_CODEGEN || "gemini-2.5-pro-preview-06-05",
+      vision: aiConfig.modelVision,
+      analysis: aiConfig.modelAnalysis,
+      codegen: aiConfig.modelCodegen,
     };
   }
 
   get isAvailable(): boolean {
-    return !!(process.env.GOOGLE_CLOUD_API_KEY);
+    return !!aiConfig.apiKey;
   }
 
   get usage(): GeminiUsage {

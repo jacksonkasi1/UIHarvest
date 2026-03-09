@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react"
 import type { ContainerEvent } from "@/lib/webcontainer"
 import { preWarmContainer, mountAndRunWithSnapshot } from "@/lib/webcontainer"
 import type { GeneratedFile, RemixProgressEvent } from "@/types/studio"
+import { apiRoutes } from "@/config/api"
 
 export function useWebContainer(
     jobId: string, 
@@ -58,7 +59,7 @@ export function useWebContainer(
 
     const fetchFiles = async () => {
         try {
-            const res = await fetch(`/api/remix/${jobId}/files`)
+            const res = await fetch(apiRoutes.remixFiles(jobId))
             if (res.ok) {
                 const data = await res.json()
                 const fetchedFiles: GeneratedFile[] = data.files ?? []
@@ -71,7 +72,7 @@ export function useWebContainer(
     }
 
     useEffect(() => {
-        const es = new EventSource(`/api/remix/${jobId}/progress`)
+        const es = new EventSource(apiRoutes.remixProgress(jobId))
         eventSourceRef.current = es
 
         es.onmessage = (e) => {

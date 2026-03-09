@@ -11,6 +11,7 @@ import { streamTarGz } from "./zip-builder.js";
 import { discoverPages } from "./extract-pipeline.js";
 import { RemixManager } from "./remix/remix-manager.js";
 import { jobStore } from "./store/job-store.js";
+import { appConfig, isProduction } from "./config.js";
 
 // ** import types
 import type { ProgressEvent } from "./extract-pipeline.js";
@@ -159,9 +160,8 @@ function resolveMemoryFile(
 // AUTH MIDDLEWARE
 // ════════════════════════════════════════════════════
 
-const SITE_PASSWORD = process.env.SITE_PASSWORD || "";
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const SITE_PASSWORD = appConfig.sitePassword;
+const SESSION_SECRET = appConfig.sessionSecret;
 const SESSION_COOKIE = "uih_session";
 
 function generateSessionToken(): string {
@@ -220,7 +220,7 @@ export function startServer(
   rootDir?: string
 ) {
   const app = express();
-  const port = Number(process.env.PORT || 3333);
+  const port = appConfig.port;
   const jobManager = new JobManager();
   const remixManager = new RemixManager();
 
@@ -254,7 +254,7 @@ export function startServer(
       const token = generateSessionToken();
       res.cookie(SESSION_COOKIE, token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isProduction(),
         sameSite: "lax",
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
       });
@@ -771,6 +771,22 @@ export function startServer(
   );
 
   if (fs.existsSync(webDistDir)) {
+    app.use((req, res, next) => {
+      const isHtmlPath =
+        req.path === "/" || req.path === "/index.html" || !req.path.includes(".");
+      const isStaticAsset = /\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|ico|webp)$/i.test(
+        req.path
+      );
+
+      if (isHtmlPath) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      } else if (isStaticAsset) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+
+      next();
+    });
+
     app.use(express.static(webDistDir));
 
     // SPA fallback: all non-API routes serve index.html

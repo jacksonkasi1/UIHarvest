@@ -85,6 +85,7 @@ echo "🚀  Deploying ${SERVICE_NAME} to Cloud Run (${GCP_REGION})…"
 
 gcloud run deploy "${SERVICE_NAME}" \
   --source . \
+  --no-cache \
   --region "${GCP_REGION}" \
   --allow-unauthenticated \
   --memory 8Gi \
