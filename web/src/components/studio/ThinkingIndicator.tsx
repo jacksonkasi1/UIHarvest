@@ -1,14 +1,12 @@
-import { Sparkles } from "lucide-react"
+import { Lightbulb } from "lucide-react"
 
 export function ThinkingIndicator() {
     return (
-        <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 px-2 py-3">
-            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center">
-                <Sparkles className="h-4 w-4 text-gray-400" />
+        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 px-1 py-2">
+            <div className="flex shrink-0 items-center justify-center">
+                <Lightbulb className="h-[15px] w-[15px] text-muted-foreground" />
             </div>
-            <div className="flex items-center gap-2">
-                <span className="text-[13px] text-gray-500 font-medium">Thinking</span>
-            </div>
+            <span className="text-[13px] text-muted-foreground font-medium">Thought for a moment</span>
         </div>
     )
 }
