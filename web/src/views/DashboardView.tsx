@@ -92,7 +92,19 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         e.stopPropagation();
         if (!confirm("Are you sure you want to delete this project?")) return;
         try {
-            await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+            const res = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+            if (!res.ok) {
+                throw new Error("Failed to delete project");
+            }
+
+            // Remove client-side chat cache for this project.
+            localStorage.removeItem(`remix-chat-${jobId}`);
+
+            // If this was the active extraction job bookmark, clear it too.
+            if (localStorage.getItem("uih_jobId") === jobId) {
+                localStorage.removeItem("uih_jobId");
+            }
+
             fetchJobs();
         } catch (err) {
             console.error("Failed to delete job", err);
