@@ -28,11 +28,11 @@ export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (
         }
     }, [messages, jobId])
 
-    const handleSendMessage = async () => {
-        const prompt = chatInput.trim()
+    const handleSendMessage = async (overridePrompt?: string) => {
+        const prompt = (overridePrompt ?? chatInput).trim()
         if (!prompt || isStreaming) return
 
-        const currentImages = [...attachedImages]
+        const currentImages = overridePrompt ? [] : [...attachedImages]
         const userMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: "user",
@@ -42,8 +42,10 @@ export function useRemixChat(jobId: string, containerReady: boolean, setFiles: (
             status: "done"
         }
 
-        setChatInput("")
-        setAttachedImages([])
+        if (!overridePrompt) {
+            setChatInput("")
+            setAttachedImages([])
+        }
         setMessages((prev) => [...prev, userMsg])
         setIsStreaming(true)
         setIsThinking(true)

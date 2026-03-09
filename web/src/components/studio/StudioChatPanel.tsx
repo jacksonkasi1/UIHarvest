@@ -13,7 +13,7 @@ interface StudioChatPanelProps {
     isReady: boolean
     isStreaming: boolean
     isThinking: boolean
-    handleSendMessage: () => void
+    handleSendMessage: (overridePrompt?: string) => void
     handleStop: () => void
     attachedImages: ImageAttachment[]
     setAttachedImages: React.Dispatch<React.SetStateAction<ImageAttachment[]>>
@@ -101,6 +101,19 @@ export function StudioChatPanel({
         }, 50)
     }
 
+    const handleRetryMessage = (msgIdx: number) => {
+        let prompt = ""
+        for (let i = msgIdx - 1; i >= 0; i--) {
+            if (messages[i].role === "user") {
+                prompt = messages[i].content || ""
+                break
+            }
+        }
+        if (prompt) {
+            handleSendMessage(prompt)
+        }
+    }
+
     return (
         <div className="flex w-[420px] shrink-0 flex-col bg-background relative z-10 border-r border-border">
             <ScrollArea className="flex-1 p-5 pb-0">
@@ -116,7 +129,12 @@ export function StudioChatPanel({
 
                     {/* Chat messages */}
                     {messages.map((msg, msgIdx) => (
-                        <ChatMessageBubble key={msg.id} msg={msg} msgIdx={msgIdx} />
+                        <ChatMessageBubble 
+                            key={msg.id} 
+                            msg={msg} 
+                            msgIdx={msgIdx} 
+                            onRetry={msg.role === "assistant" && !isStreaming && msgIdx === messages.length - 1 ? () => handleRetryMessage(msgIdx) : undefined}
+                        />
                     ))}
 
                     {isThinking && <ThinkingIndicator />}
