@@ -472,7 +472,7 @@ export async function runExtraction(
     const force = options.force ?? false;
     const resume = options.resume ?? false;
     const skipVision = options.skipVision ?? false;
-    let runMemory = options.runMemory ?? false;
+    let runMemory = options.runMemory ?? true;
 
     const emit = (event: ProgressEvent) => {
         if (onProgress) onProgress(event);

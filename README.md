@@ -2,7 +2,7 @@
 
 UI Harvest is a powerful CLI tool powered by Playwright that automatically extracts a **complete design system** from any live website. It crawls the page, analyzes the DOM and computed styles, takes screenshots, downloads assets, and generates a structured JSON representation of the site's design language — alongside a beautiful local web viewer to explore the extracted data.
 
-Optionally, it runs a **Gemini-powered AI pipeline** (Phase 1.5 Vision + Phase 2 Design Memory) that produces a `.design-memory/` folder of structured markdown files that any LLM can consume to rebuild or remix the UI.
+Optionally, it runs a **Gemini-powered AI pipeline** (Phase 1.5 Vision + Phase 2 Design Memory) that produces a `design-memory/` folder of structured markdown files that any LLM can consume to rebuild or remix the UI.
 
 ## 🚀 Features
 
@@ -14,7 +14,7 @@ Optionally, it runs a **Gemini-powered AI pipeline** (Phase 1.5 Vision + Phase 2
 - **📐 Layout System:** Extracts container max-widths and identifies high-level page sections (Headers, Footers, Main content areas).
 - **📦 Assets & Media:** Downloads images, captures and deduplicates SVGs (with reuse counts), and detects videos and pseudo-elements (`::before` / `::after`).
 - **👁️ AI Vision Pass (Phase 1.5):** Uses Gemini Vision to scan the page across multiple viewports, extracting high-quality components with visual understanding.
-- **🧠 Design Memory (Phase 2):** Runs an analyze → interpret → render pipeline (powered by Gemini) that produces 14 structured markdown files under `.design-memory/` — ready for LLMs to rebuild or remix the UI.
+- **🧠 Design Memory (Phase 2):** Runs an analyze → interpret → render pipeline (powered by Gemini) that produces 14 structured markdown files under `design-memory/` — ready for LLMs to rebuild or remix the UI.
 - **🖥️ Explorer UI:** Ships with a standalone viewer interface to browse the extracted tokens, components, patterns, and assets interactively.
 
 ## 📦 Installation
@@ -79,7 +79,7 @@ The tool will:
 4. Extract all tokens, components, assets, and hover states.
 5. Run the AI Vision pass (Phase 1.5) if `GOOGLE_CLOUD_API_KEY` is set.
 6. Prompt whether to run Design Memory generation (Phase 2).
-7. Save output to `./output/` (JSON, screenshots, assets, fonts, and `.design-memory/`).
+7. Save output to `./output/` (JSON, screenshots, assets, fonts, and `design-memory/`).
 8. Start a local server at `http://localhost:3333` and open the Explorer UI.
 
 ### CLI Flags
@@ -117,7 +117,7 @@ output/
 ├── screenshots/                # Full-page, section, component, and hover screenshots
 ├── assets/                     # Downloaded images and SVG files
 ├── fonts/                      # Intercepted font files
-└── .design-memory/             # AI-generated design memory (Phase 2)
+└── design-memory/             # AI-generated design memory (Phase 2)
     ├── INSTRUCTIONS.md         # How to use the memory files
     ├── principles.md           # Core design principles
     ├── style.md                # Color, typography, spacing tokens
@@ -141,7 +141,7 @@ When Phase 2 runs, it executes three stages against the scraped `rawData`:
 
 1. **Analyze** — Maps UIHarvest tokens directly to a `DesignIR` intermediate representation (colors, typography, spacing, radii, elevation, layout, components, motion, breakpoints).
 2. **Interpret** — Sends the IR to Gemini to produce semantic tokens (color roles, type scale), component narratives, and design doctrine. Includes a Zod-validated repair loop.
-3. **Render** — Writes 14 markdown files to `output/.design-memory/` that any LLM can load to rebuild or remix the UI.
+3. **Render** — Writes 14 markdown files to `output/design-memory/` that any LLM can load to rebuild or remix the UI.
 
 ## 📝 License
 

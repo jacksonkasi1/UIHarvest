@@ -31,7 +31,7 @@ export class MemoryGenerator {
   constructor(ai: GeminiClient, rawData: any, outputRoot: string) {
     this.ai = ai;
     this.rawData = rawData;
-    this.outDir = path.join(outputRoot, '.design-memory');
+    this.outDir = path.join(outputRoot, 'design-memory');
   }
 
   async generateAll(): Promise<{ success: boolean; dir: string }> {

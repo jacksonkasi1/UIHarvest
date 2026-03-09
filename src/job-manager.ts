@@ -48,7 +48,7 @@ export class JobManager {
     /**
      * Create and immediately start a new extraction job.
      */
-    create(url: string, runMemory: boolean = false, pages?: string[]): Job {
+    create(url: string, runMemory: boolean = true, pages?: string[]): Job {
         const id = crypto.randomUUID().slice(0, 12);
         const outputDir = path.join(os.tmpdir(), `uiharvest-job-${id}`);
 

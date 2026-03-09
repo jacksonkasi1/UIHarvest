@@ -97,17 +97,6 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         }, 1000)
     }
 
-    const handleDownloadAll = () => {
-        const content = files.map((f) => `// ═══ ${f.path} ═══\n${f.content}`).join("\n\n")
-        const blob = new Blob([content], { type: "text/plain" })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = `remix-${jobId}.txt`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
-
     return (
         <div className="flex h-dvh w-full flex-col bg-background text-foreground overflow-hidden font-sans">
             <StudioHeader 

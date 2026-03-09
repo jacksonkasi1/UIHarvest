@@ -22,7 +22,7 @@ export function LandingView({ onPagesDiscovered, existingJobId, onResumeJob }: L
     const [url, setUrl] = useState("")
     const [error, setError] = useState("")
     const [loading, setLoading] = useState(false)
-    const [runMemory, setRunMemory] = useState(false)
+    const [runMemory, setRunMemory] = useState(true)
 
     const isValidUrl = (input: string): boolean => {
         try {

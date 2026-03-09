@@ -62,7 +62,7 @@ function buildMemoryIndex(outputDir: string): {
   available: boolean;
   groups: MemoryGroup[];
 } {
-  const memoryRoot = path.join(outputDir, ".design-memory");
+  const memoryRoot = path.join(outputDir, "design-memory");
   if (!fs.existsSync(memoryRoot)) {
     return { available: false, groups: [] };
   }
@@ -137,7 +137,7 @@ function resolveMemoryFile(
   outputDir: string,
   requestedPath: string
 ): string | null {
-  const memoryRoot = path.join(outputDir, ".design-memory");
+  const memoryRoot = path.join(outputDir, "design-memory");
   if (!requestedPath) return null;
 
   const resolved = path.resolve(memoryRoot, requestedPath);
@@ -337,7 +337,7 @@ export function startServer(
       return;
     }
 
-    const job = jobManager.create(url, runMemory ?? false, pages);
+    const job = jobManager.create(url, runMemory ?? true, pages);
     res.json({ jobId: job.id, status: job.status });
   });
 

@@ -7,7 +7,7 @@ web/dist
 .gitignore
 *.md
 .env.local
-.design-memory
+design-memory
 .explore
 .gemini
 .agents
