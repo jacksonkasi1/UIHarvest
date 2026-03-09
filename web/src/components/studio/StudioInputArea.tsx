@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { MessageSquare, ArrowUp, X, Paperclip, ChevronDown, Square } from "lucide-react"
+import { MessageSquare, ArrowUp, X, Paperclip, Square, Zap, Lightbulb } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -144,24 +144,25 @@ export function StudioInputArea({
                                 <Paperclip aria-hidden="true" className="w-3.5 h-3.5 mr-1.5" />
                                 Attach
                             </Button>
-                            
+                        </div>
+                        <div className="flex gap-1.5 items-center">
                             <DropdownMenu>
-                                <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap h-8 rounded-full px-3 text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium text-[12px]">
+                                <DropdownMenuTrigger className="flex items-center text-[12px] font-medium text-muted-foreground mr-1 hover:text-foreground focus:outline-none transition-colors">
+                                    {selectedMode === "Yolo" ? (
+                                        <Zap aria-hidden="true" className="w-3.5 h-3.5 mr-1.5" />
+                                    ) : selectedMode === "Smart" ? (
+                                        <Lightbulb aria-hidden="true" className="w-3.5 h-3.5 mr-1.5" />
+                                    ) : (
+                                        <MessageSquare aria-hidden="true" className="w-3.5 h-3.5 mr-1.5" />
+                                    )}
                                     {selectedMode}
-                                    <ChevronDown aria-hidden="true" className="w-3 h-3 ml-1" />
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-32">
+                                <DropdownMenuContent align="end" className="w-32">
                                     <DropdownMenuItem onClick={() => setSelectedMode("Chat")}>Chat</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => setSelectedMode("Yolo")}>Yolo</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => setSelectedMode("Smart")}>Smart</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                        </div>
-                        <div className="flex gap-1.5 items-center">
-                            <div className="flex items-center text-[12px] font-medium text-muted-foreground mr-1">
-                                <MessageSquare aria-hidden="true" className="w-3.5 h-3.5 mr-1.5" />
-                                Chat
-                            </div>
                             {isStreaming ? (
                                 <Button
                                     size="icon"
