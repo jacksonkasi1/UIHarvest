@@ -13,7 +13,6 @@ export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
             >
                 {exec.status === "running" ? (
                     <div className="relative shrink-0">
-                        <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
                         <Loader2 className="h-4 w-4 animate-spin text-primary relative" />
                     </div>
                 ) : exec.status === "complete" ? (
