@@ -130,7 +130,10 @@ type Intent = "conversation" | "code_change";
 const INTENT_SYSTEM_PROMPT = `You are an intent classifier for a live coding platform. 
 Given a user message, classify it as ONE of:
 - "conversation" — greetings, questions about the project, asking for explanations, general chat, help requests, or anything that does NOT require modifying code files
-- "code_change" — requests to modify, add, remove, fix, update, or change any aspect of the website code, design, layout, colors, components, etc.
+- "code_change" — requests to write code, modify, add, remove, fix, update, delete, clear, clone, or change any aspect of the website code, design, layout, colors, components, etc.
+
+If the user is asking to build, create, write, or generate code, it is ALWAYS a "code_change".
+If the user says "make a clone", "delete code", "write code", it is a "code_change".
 
 Respond with ONLY the word "conversation" or "code_change". Nothing else.`;
 
@@ -155,7 +158,7 @@ async function classifyIntent(ai: GeminiClient, message: string): Promise<Intent
 }
 
 function classifyByKeywords(message: string): Intent {
-    const codeKeywords = /\b(build|create|change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet|copy|replicate)\b/i;
+    const codeKeywords = /\b(build|create|change|modify|update|add|remove|fix|make|set|replace|move|resize|style|color|font|layout|header|footer|button|section|page|component|animate|responsive|dark|light|theme|bigger|smaller|width|height|padding|margin|border|shadow|gradient|image|background|text|title|subtitle|heading|paragraph|link|hover|click|scroll|mobile|desktop|tablet|copy|replicate|write|code|delete|clear|clone|generate)\b/i;
     return codeKeywords.test(message) ? "code_change" : "conversation";
 }
 
