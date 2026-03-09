@@ -97,6 +97,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --session-affinity \
   --set-env-vars "${ENV_VARS}"
 
+URL=$(gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --format 'value(status.url)')
 echo ""
-echo "✅  Deployed! Get the URL with:"
-echo "    gcloud run services describe ${SERVICE_NAME} --region ${GCP_REGION} --format 'value(status.url)'"
+echo "✅  Deployed successfully!"
+echo "🌐  Live URL: $URL"
