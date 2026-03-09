@@ -4,7 +4,7 @@ WORKDIR /app/web
 COPY web/package.json web/bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY web/ ./
-RUN bun run build
+RUN echo "Force rebuild 2" && bun run build
 
 # ── Stage 2: Runtime ─────────────────────────────────────────
 FROM oven/bun:1

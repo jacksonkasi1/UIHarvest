@@ -224,7 +224,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
                                 ref={textareaRef}
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
-                                placeholder="Ask UI Harvest to create a landing page for my..."
+                                placeholder="Ask UIHarvest to create a landing page for my..."
                                 className="w-full bg-transparent border-none text-[15px] resize-none min-h-[48px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0 px-2 py-1 leading-relaxed overflow-y-auto"
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
