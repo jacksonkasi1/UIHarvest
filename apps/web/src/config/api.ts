@@ -12,4 +12,14 @@ export const apiRoutes = {
   // Studio chat (apps/server)
   chat: (jobId: string) => `${API_BASE}/api/chat/${jobId}`,
   chatFiles: (jobId: string) => `${API_BASE}/api/chat/${jobId}/files`,
+
+  // Standalone vibe-coding project routes
+  projects: () => `${API_BASE}/api/projects`,
+  createProject: () => `${API_BASE}/api/projects`,
+  projectFiles: (projectId: string) => `${API_BASE}/api/projects/${projectId}/files`,
+  projectProgress: (projectId: string) => `${API_BASE}/api/projects/${projectId}/progress`,
+
+  // Auth
+  authStatus: () => `${API_BASE}/api/auth/status`,
+  login: () => `${API_BASE}/api/auth/login`,
 }

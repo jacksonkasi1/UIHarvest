@@ -101,6 +101,7 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
                 await fetch(`/api/projects/${studioId}`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({ name: newName })
                 })
             } catch (err) {
@@ -144,6 +145,7 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
                     await fetch(filesEndpoint, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
+                        credentials: "include",
                         body: JSON.stringify({ path: p, content: c })
                     })
                 } catch (err) {

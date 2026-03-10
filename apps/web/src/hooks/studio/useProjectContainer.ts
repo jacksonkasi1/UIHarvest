@@ -129,8 +129,9 @@ export function useProjectContainer(
     }, [projectId, onContainerEvent, setContainerReady, setContainerLogs, setPreviewUrl, setIsBootingContainer, setError])
 
     const fetchFiles = async () => {
+        if (projectId === "__noop__") return
         try {
-            const res = await fetch(apiRoutes.projectFiles(projectId))
+            const res = await fetch(apiRoutes.projectFiles(projectId), { credentials: "include" })
             if (res.ok) {
                 const data = await res.json()
                 if (data.job?.projectName) {
@@ -146,7 +147,9 @@ export function useProjectContainer(
     }
 
     useEffect(() => {
-        const es = new EventSource(apiRoutes.projectProgress(projectId))
+        if (projectId === "__noop__") return
+
+        const es = new EventSource(apiRoutes.projectProgress(projectId), { withCredentials: true })
         eventSourceRef.current = es
 
         es.onmessage = (e) => {

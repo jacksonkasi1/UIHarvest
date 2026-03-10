@@ -123,10 +123,14 @@ export function useWebContainer(
     }, [jobId, onContainerEvent, setContainerReady, setContainerLogs, setPreviewUrl, setIsBootingContainer, setError])
 
     const fetchFiles = async () => {
+        if (jobId === "__noop__") return
         try {
-            const res = await fetch(apiRoutes.remixFiles(jobId))
+            const res = await fetch(apiRoutes.remixFiles(jobId), { credentials: "include" })
             if (res.ok) {
                 const data = await res.json()
+                if (data.job?.projectName) {
+                    setProjectName(data.job.projectName)
+                }
                 const fetchedFiles: GeneratedFile[] = data.files ?? []
                 setFiles(fetchedFiles)
                 const appFile = fetchedFiles.find((f) => f.path === "src/App.tsx")
@@ -137,7 +141,9 @@ export function useWebContainer(
     }
 
     useEffect(() => {
-        const es = new EventSource(apiRoutes.remixProgress(jobId))
+        if (jobId === "__noop__") return
+
+        const es = new EventSource(apiRoutes.remixProgress(jobId), { withCredentials: true })
         eventSourceRef.current = es
 
         es.onmessage = (e) => {
