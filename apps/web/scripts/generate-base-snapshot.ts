@@ -54,8 +54,9 @@ const BASE_PACKAGE_JSON = {
         "@types/react": "^19.0.6",
         "@types/react-dom": "^19.0.3",
         "@vitejs/plugin-react": "^4.3.4",
-        tailwindcss: "4.1.18",
-        "@tailwindcss/vite": "4.1.18",
+        autoprefixer: "^10.4.21",
+        postcss: "^8.5.3",
+        tailwindcss: "^3.4.17",
         typescript: "~5.7.2",
         vite: "^6.1.0",
     },
@@ -67,12 +68,11 @@ const BASE_PACKAGE_JSON = {
 };
 
 const VITE_CONFIG = `import path from "path"
-import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -191,7 +191,25 @@ createRoot(document.getElementById("root")!).render(
 )
 `;
 
-const INDEX_CSS = `@import "tailwindcss";`;
+const INDEX_CSS = `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+`;
+const POSTCSS_CONFIG = `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+`;
+const TAILWIND_CONFIG = `/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: "class",
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  theme: { extend: {} },
+  plugins: [],
+};
+`;
 
 // ════════════════════════════════════════════════════
 // SYMLINK RESOLVER
@@ -334,6 +352,8 @@ async function main() {
         writeFileSync(join(tempDir, "tsconfig.app.json"), TSCONFIG_APP);
         writeFileSync(join(tempDir, "tsconfig.node.json"), TSCONFIG_NODE);
         writeFileSync(join(tempDir, "index.html"), INDEX_HTML);
+        writeFileSync(join(tempDir, "postcss.config.js"), POSTCSS_CONFIG);
+        writeFileSync(join(tempDir, "tailwind.config.ts"), TAILWIND_CONFIG);
         
 
         // Create src directory

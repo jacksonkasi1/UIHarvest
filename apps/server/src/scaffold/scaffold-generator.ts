@@ -47,6 +47,8 @@ const ENFORCED_INFRA_PATHS = new Set([
   "vite.config.ts",
   "postcss.config.js",
   "tailwind.config.ts",
+  "postcss.config.js",
+  "tailwind.config.ts",
   "tsconfig.json",
   "tsconfig.app.json",
   "tsconfig.node.json",
