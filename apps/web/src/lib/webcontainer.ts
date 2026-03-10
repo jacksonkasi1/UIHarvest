@@ -9,6 +9,8 @@ import {
     saveSnapshot,
     loadSnapshot,
     fetchSnapshotVersion,
+    purgeStaleSnapshots,
+    clearAllCaches,
     loadBaseSnapshot,
     saveBaseSnapshot,
 } from "./snapshot-cache"
@@ -54,6 +56,8 @@ async function _ensureExecutablePermissions(wc: WebContainer): Promise<void> {
     const executablePaths = [
         "node_modules/.bin/vite",
         "node_modules/vite/bin/vite.js",
+        "node_modules/@esbuild/linux-x64/bin/esbuild",
+        "node_modules/esbuild/bin/esbuild"
     ]
 
     for (const executablePath of executablePaths) {
@@ -183,6 +187,9 @@ async function _doPreWarm(onEvent: ContainerEventHandler): Promise<void> {
         _snapshotVersion = version
         onEvent({ type: "boot", message: "WebContainer ready" })
 
+        // Auto-purge stale per-job snapshots from previous versions
+        purgeStaleSnapshots(version).catch(() => { /* no-op */ })
+
         // Fetch pre-built snapshot (node_modules already included)
         const snapshotData = await _fetchBaseSnapshot(version, onEvent)
 
@@ -291,7 +298,40 @@ async function _startDevServer(
     version: string
 ): Promise<{ previewUrl: string | null; teardown: () => void }> {
     await _ensureExecutablePermissions(wc)
-    onEvent({ type: "dev-start", message: "Starting dev server (npm run dev)\u2026" })
+
+    // --- DEBUG INJECTIONS ---
+    onEvent({ type: "dev-start", message: "Running diagnostics..." })
+    
+    // Test 1: Check platform
+    const platformProc = await wc.spawn("node", ["-e", "console.log('Node:', process.versions.node, 'Platform:', process.platform, process.arch)"])
+    let platformOut = ""
+    platformProc.output.pipeTo(new WritableStream({ write(data) { platformOut += data } }))
+    await platformProc.exit
+    onEvent({ type: "terminal", message: `> ${platformOut.trim()}` })
+
+    // Test 2: Check esbuild
+    const esbuildProc = await wc.spawn("node", ["-e", "try { const v = require('esbuild'); console.log('esbuild loaded, type:', typeof v.build) } catch(e) { console.error('esbuild failed:', e.message) }"])
+    let esbuildOut = ""
+    esbuildProc.output.pipeTo(new WritableStream({ write(data) { esbuildOut += data } }))
+    await esbuildProc.exit
+    onEvent({ type: "terminal", message: `> esbuild test: ${esbuildOut.trim()}` })
+
+    // Test 3: Check rollup
+    const rollupProc = await wc.spawn("node", ["-e", "try { const v = require('rollup'); console.log('rollup loaded') } catch(e) { console.error('rollup failed:', e.message) }"])
+    let rollupOut = ""
+    rollupProc.output.pipeTo(new WritableStream({ write(data) { rollupOut += data } }))
+    await rollupProc.exit
+    onEvent({ type: "terminal", message: `> rollup test: ${rollupOut.trim()}` })
+    
+    // Test 4: Check if deps cache exists
+    const lsProc = await wc.spawn("ls", ["-la", "node_modules/.vite/deps"])
+    let lsOut = ""
+    lsProc.output.pipeTo(new WritableStream({ write(data) { lsOut += data } }))
+    await lsProc.exit
+    onEvent({ type: "terminal", message: `> cache test: ${lsOut.includes("No such file") ? "MISSING" : "EXISTS"}` })
+    // --- END DEBUG ---
+
+    onEvent({ type: "dev-start", message: "Starting dev server (npm run dev)…" })
     const devProcess = await wc.spawn("npm", ["run", "dev"])
 
     const decoder = new TextDecoder()
@@ -532,4 +572,35 @@ export async function teardown(): Promise<void> {
         _preWarmPromise = null
         _preWarmed = false
     }
+}
+
+/**
+ * Full hard reset: clear all IndexedDB caches, tear down the WebContainer,
+ * and reset all internal state so the next boot starts completely fresh.
+ *
+ * Used by the manual "reload" button in the studio header.
+ */
+export async function resetContainer(): Promise<void> {
+    console.log("[webcontainer] Hard reset: clearing caches and tearing down…")
+
+    // 1. Clear all IndexedDB caches (base + per-job snapshots)
+    await clearAllCaches()
+
+    // 2. Tear down the running WebContainer instance
+    if (_instance) {
+        try {
+            _instance.teardown()
+        } catch {
+            // Instance may already be destroyed
+        }
+    }
+
+    // 3. Reset all internal state
+    _instance = null
+    _bootPromise = null
+    _preWarmPromise = null
+    _preWarmed = false
+    _snapshotVersion = "unknown"
+
+    console.log("[webcontainer] Hard reset complete — ready for fresh boot")
 }

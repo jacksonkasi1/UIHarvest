@@ -4,6 +4,7 @@ import { X } from "lucide-react"
 
 // ** import hooks
 import { useWebContainer } from "@/hooks/studio/useWebContainer"
+import { useProjectContainer } from "@/hooks/studio/useProjectContainer"
 import { useRemixChat } from "@/hooks/studio/useRemixChat"
 
 // ** import components
@@ -14,66 +15,112 @@ import { StudioWorkspace } from "@/components/studio/StudioWorkspace"
 // ** import types
 import type { RightPanel, ViewportSize, GeneratedFile } from "@/types/studio"
 
-interface RemixStudioProps {
-    jobId: string
-    onBack: () => void
-}
+// ── One of jobId or projectId must be provided ───────────────────────────────
 
-export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
+type RemixStudioProps =
+  | { jobId: string; projectId?: never; onBack: () => void }
+  | { projectId: string; jobId?: never; onBack: () => void }
+
+export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) {
     const [selectedFile, setSelectedFile] = useState<string | null>(null)
     const [rightPanel, setRightPanel] = useState<RightPanel>("preview")
     const [viewportSize, setViewportSize] = useState<ViewportSize>("desktop")
     const [isChatExpanded, setIsChatExpanded] = useState(true)
-    
+
+    // The ID used as the key for Firestore + chat — same shape for both flows
+    const studioId = (jobId ?? projectId) as string
+    const isProjectMode = !!projectId
+
     // State
     const [files, setFiles] = useState<GeneratedFile[]>([])
     const [containerReady, setContainerReady] = useState(false)
-    // Shared terminal log state — fed by both useWebContainer and useRemixChat
+    // Shared terminal log state — fed by both container hook and useRemixChat
     const [containerLogs, setContainerLogs] = useState<string[]>([])
 
-    // Hooks
-    const { 
-        isBootingContainer, 
-        previewUrl, 
-        error, 
-        setError, 
-        phase, 
-        statusMessage 
-    } = useWebContainer(jobId, setFiles, setSelectedFile, setContainerReady, containerReady, setContainerLogs)
+    // ── Container hook — pick based on mode ─────────────────────────────────
+    const jobContainerResult = useWebContainer(
+        isProjectMode ? "__noop__" : studioId,
+        setFiles,
+        setSelectedFile,
+        setContainerReady,
+        containerReady,
+        setContainerLogs,
+    )
 
-    const { 
-        messages, 
-        chatInput, 
-        setChatInput, 
-        isStreaming, 
-        isThinking, 
-        attachedImages, 
-        setAttachedImages, 
-        refreshKey, 
-        setRefreshKey, 
-        handleSendMessage, 
-        handleStop, 
+    const projectContainerResult = useProjectContainer(
+        isProjectMode ? studioId : "__noop__",
+        setFiles,
+        setSelectedFile,
+        setContainerReady,
+        containerReady,
+        setContainerLogs,
+    )
+
+    const {
+        isBootingContainer,
+        previewUrl,
+        error,
+        setError,
+        phase,
+        statusMessage,
+        projectName,
+        setProjectName,
+        hardReloadKey,
+        setHardReloadKey,
+        handleHardReset,
+    } = isProjectMode ? projectContainerResult : jobContainerResult
+
+    const {
+        messages,
+        chatInput,
+        setChatInput,
+        isStreaming,
+        isThinking,
+        attachedImages,
+        setAttachedImages,
+        refreshKey,
+        setRefreshKey,
+        handleSendMessage,
+        handleStop,
         chatInputRef,
         RuntimeProvider,
-    } = useRemixChat(jobId, containerReady, setFiles, setContainerLogs)
+    } = useRemixChat(studioId, containerReady, setFiles, setContainerLogs)
 
     const isReady = phase === "ready"
     const isError = phase === "error"
 
-    const handleRefreshPreview = () => setRefreshKey(prev => prev + 1)
-    
+    const handleRefreshPreview = () => {
+        setRefreshKey(prev => prev + 1)
+        setHardReloadKey?.(prev => prev + 1)
+    }
+
+    const handleRenameProject = async (newName: string) => {
+        setProjectName?.(newName)
+        if (isProjectMode) {
+            try {
+                await fetch(`/api/projects/${studioId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: newName })
+                })
+            } catch (err) {
+                console.error("Failed to rename project", err)
+            }
+        }
+    }
+
     const pendingEditsRef = useRef(new Map<string, string>())
     const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    
+
     const handleFileEdit = (path: string, newContent: string) => {
         // Update local React state
         setFiles(prev => prev.map(f => (f.path === path ? { ...f, content: newContent } : f)))
-        
+
         // Track all pending edits across different files
         pendingEditsRef.current.set(path, newContent)
-        
+
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-        
+
         saveTimeoutRef.current = setTimeout(async () => {
             const edits = Array.from(pendingEditsRef.current.entries())
             pendingEditsRef.current.clear()
@@ -83,17 +130,24 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                 const { writeFiles } = await import("@/lib/webcontainer")
                 writeFiles(edits.map(([p, c]) => ({ path: p, content: c }))).catch(console.error)
             }
-            
-            // 2. Persist to backend (Durable manual edits)
+
+            // 2. Persist to backend
+            // Both scraper jobs and standalone projects share the same files endpoint shape:
+            //   scraper: POST /api/remix/:jobId/files
+            //   project: POST /api/projects/:projectId/files
+            const filesEndpoint = isProjectMode
+                ? `/api/projects/${studioId}/files`
+                : `/api/remix/${studioId}/files`
+
             for (const [p, c] of edits) {
                 try {
-                    await fetch(`/api/remix/${jobId}/files`, {
+                    await fetch(filesEndpoint, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ path: p, content: c })
                     })
                 } catch (err) {
-                    console.error(`[Studio] Failed to persist file edit to backend for ${p}:`, err)
+                    console.error(`[Studio] Failed to persist file edit for ${p}:`, err)
                 }
             }
         }, 1000)
@@ -102,7 +156,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     return (
         <RuntimeProvider>
         <div className="flex h-dvh w-full flex-col bg-background text-foreground overflow-hidden font-sans">
-            <StudioHeader 
+            <StudioHeader
                 isReady={isReady}
                 isBootingContainer={isBootingContainer}
                 statusMessage={statusMessage}
@@ -115,7 +169,10 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                 setViewportSize={setViewportSize}
                 isChatExpanded={isChatExpanded}
                 onToggleChat={() => setIsChatExpanded(!isChatExpanded)}
-                projectName="Elegant Portfolio"
+                projectName={projectName}
+                onRenameProject={handleRenameProject}
+                onHardReset={handleHardReset}
+                error={error}
             />
 
             {isError && error && (
@@ -127,7 +184,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
 
             <div className="flex flex-1 overflow-hidden relative">
                 {isChatExpanded && (
-                    <StudioChatPanel 
+                    <StudioChatPanel
                         messages={messages}
                         chatInput={chatInput}
                         setChatInput={setChatInput}
@@ -144,11 +201,12 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                     />
                 )}
 
-                <StudioWorkspace 
+                <StudioWorkspace
                     rightPanel={rightPanel}
                     previewUrl={previewUrl}
                     isBootingContainer={isBootingContainer}
                     refreshKey={refreshKey}
+                    hardReloadKey={hardReloadKey}
                     files={files}
                     selectedFile={selectedFile}
                     setSelectedFile={setSelectedFile}

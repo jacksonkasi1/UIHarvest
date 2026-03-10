@@ -315,6 +315,37 @@ export async function loadBaseSnapshot(version: string): Promise<Uint8Array | nu
  * Save the pre-built base snapshot to IndexedDB.
  * Automatically evicts all other versions to keep storage clean.
  */
+/**
+ * Clear ALL IndexedDB caches (both base-snapshot and per-job snapshots).
+ * Used by the manual hard-reset button to force a full re-download.
+ */
+export async function clearAllCaches(): Promise<void> {
+    try {
+        const db = await openDB()
+
+        // Clear per-job snapshots
+        const tx1 = db.transaction(STORE_NAME, "readwrite")
+        tx1.objectStore(STORE_NAME).clear()
+        await new Promise<void>((resolve, reject) => {
+            tx1.oncomplete = () => resolve()
+            tx1.onerror = () => reject(tx1.error)
+        })
+
+        // Clear base snapshot
+        const tx2 = db.transaction(BASE_STORE_NAME, "readwrite")
+        tx2.objectStore(BASE_STORE_NAME).clear()
+        await new Promise<void>((resolve, reject) => {
+            tx2.oncomplete = () => resolve()
+            tx2.onerror = () => reject(tx2.error)
+        })
+
+        db.close()
+        console.log("[snapshot-cache] All caches cleared")
+    } catch (err) {
+        console.warn("[snapshot-cache] Failed to clear all caches:", (err as Error).message)
+    }
+}
+
 export async function saveBaseSnapshot(version: string, data: ArrayBuffer): Promise<void> {
     try {
         const db = await openDB();

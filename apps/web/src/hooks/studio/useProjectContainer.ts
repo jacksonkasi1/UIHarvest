@@ -3,8 +3,8 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import type { Dispatch, SetStateAction } from "react"
 
 // ** import lib
-import type { ContainerEvent } from "@/lib/webcontainer"
 import { preWarmContainer, mountAndRunWithSnapshot, resetContainer } from "@/lib/webcontainer"
+import type { ContainerEvent } from "@/lib/webcontainer"
 
 // ** import types
 import type { GeneratedFile, RemixProgressEvent } from "@/types/studio"
@@ -12,13 +12,19 @@ import type { GeneratedFile, RemixProgressEvent } from "@/types/studio"
 // ** import apis
 import { apiRoutes } from "@/config/api"
 
-export function useWebContainer(
-    jobId: string, 
-    setFiles: (files: GeneratedFile[]) => void, 
+/**
+ * useProjectContainer
+ *
+ * Mirror of useWebContainer but uses the standalone /api/projects/:id/* routes
+ * instead of the scraper-originated /api/remix/:id/* routes.
+ */
+export function useProjectContainer(
+    projectId: string,
+    setFiles: (files: GeneratedFile[]) => void,
     setSelectedFile: (file: string | null) => void,
     setContainerReady: (ready: boolean) => void,
     containerReady: boolean,
-    setContainerLogs: Dispatch<SetStateAction<string[]>>
+    setContainerLogs: Dispatch<SetStateAction<string[]>>,
 ) {
     const [isBootingContainer, setIsBootingContainer] = useState(false)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -26,8 +32,8 @@ export function useWebContainer(
 
     const [phase, setPhase] = useState("init")
     const [progress, setProgress] = useState(0)
-    const [statusMessage, setStatusMessage] = useState("Starting remix…")
-    const [projectName, setProjectName] = useState<string>("Elegant Portfolio")
+    const [statusMessage, setStatusMessage] = useState("Generating project…")
+    const [projectName, setProjectName] = useState<string>("My Project")
 
     const eventSourceRef = useRef<EventSource | null>(null)
     const teardownRef = useRef<(() => void) | null>(null)
@@ -66,7 +72,7 @@ export function useWebContainer(
         setIsBootingContainer(true)
         lastFilesRef.current = filesToMount
 
-        const result = await mountAndRunWithSnapshot(jobId, filesToMount, onContainerEvent)
+        const result = await mountAndRunWithSnapshot(projectId, filesToMount, onContainerEvent)
         teardownRef.current = result.teardown
 
         if (result.previewUrl) {
@@ -77,10 +83,10 @@ export function useWebContainer(
 
         isBootingRef.current = false
         setIsBootingContainer(false)
-    }, [containerReady, jobId, onContainerEvent, setPreviewUrl, setContainerReady, setIsBootingContainer])
+    }, [containerReady, projectId, onContainerEvent, setPreviewUrl, setContainerReady, setIsBootingContainer])
 
     const handleHardReset = useCallback(async () => {
-        console.log("[useWebContainer] Hard reset triggered")
+        console.log("[useProjectContainer] Hard reset triggered")
 
         // Kill current dev server
         teardownRef.current?.()
@@ -104,7 +110,7 @@ export function useWebContainer(
 
             const filesToMount = lastFilesRef.current
             if (filesToMount.length > 0) {
-                const result = await mountAndRunWithSnapshot(jobId, filesToMount, onContainerEvent)
+                const result = await mountAndRunWithSnapshot(projectId, filesToMount, onContainerEvent)
                 teardownRef.current = result.teardown
 
                 if (result.previewUrl) {
@@ -120,13 +126,16 @@ export function useWebContainer(
             isBootingRef.current = false
             setIsBootingContainer(false)
         }
-    }, [jobId, onContainerEvent, setContainerReady, setContainerLogs, setPreviewUrl, setIsBootingContainer, setError])
+    }, [projectId, onContainerEvent, setContainerReady, setContainerLogs, setPreviewUrl, setIsBootingContainer, setError])
 
     const fetchFiles = async () => {
         try {
-            const res = await fetch(apiRoutes.remixFiles(jobId))
+            const res = await fetch(apiRoutes.projectFiles(projectId))
             if (res.ok) {
                 const data = await res.json()
+                if (data.job?.projectName) {
+                    setProjectName(data.job.projectName)
+                }
                 const fetchedFiles: GeneratedFile[] = data.files ?? []
                 setFiles(fetchedFiles)
                 const appFile = fetchedFiles.find((f) => f.path === "src/App.tsx")
@@ -137,7 +146,7 @@ export function useWebContainer(
     }
 
     useEffect(() => {
-        const es = new EventSource(apiRoutes.remixProgress(jobId))
+        const es = new EventSource(apiRoutes.projectProgress(projectId))
         eventSourceRef.current = es
 
         es.onmessage = (e) => {
@@ -159,7 +168,7 @@ export function useWebContainer(
             isBootingRef.current = false
             hasBootedRef.current = false
         }
-    }, [jobId])
+    }, [projectId])
 
     return {
         containerReady,

@@ -1,5 +1,6 @@
+import { useState } from "react"
 // ** import core packages
-import { ChevronDown, Globe, Palette, Code2, Terminal, RefreshCw, Monitor, ArrowUpRight, History, PanelLeft, Smartphone, Tablet } from "lucide-react"
+import { ChevronDown, Globe, Palette, Code2, Terminal, RefreshCw, Monitor, ArrowUpRight, History, PanelLeft, Smartphone, Tablet, Plus, RotateCcw } from "lucide-react"
 
 // ** import components
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
@@ -21,6 +22,9 @@ interface StudioHeaderProps {
     isChatExpanded: boolean
     onToggleChat: () => void
     projectName?: string
+    onRenameProject?: (newName: string) => void
+    onHardReset?: () => void
+    error?: string | null
 }
 
 export function StudioHeader({
@@ -36,29 +40,70 @@ export function StudioHeader({
     setViewportSize,
     isChatExpanded,
     onToggleChat,
-    projectName = "Elegant Portfolio"
+    projectName = "My Project",
+    onRenameProject,
+    onHardReset,
+    error
 }: StudioHeaderProps) {
+    const [isEditingName, setIsEditingName] = useState(false)
+    const [editedName, setEditedName] = useState(projectName)
+
+    const handleSaveName = () => {
+        setIsEditingName(false)
+        const newName = editedName.trim()
+        if (newName && newName !== projectName) {
+            onRenameProject?.(newName)
+        } else {
+            setEditedName(projectName)
+        }
+    }
+
     return (
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 relative z-20">
             <div className="flex items-center gap-4 min-w-0">
-                {/* Logo & Back button */}
-                <button aria-label="Go back" onClick={onBack} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl transition-transform hover:scale-105">
+                {/* Logo / Home button */}
+                <button aria-label="Go home" onClick={onBack} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl transition-transform hover:scale-105">
                     <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FF512F] via-[#F09819] to-[#DD2476] flex items-center justify-center shadow-sm" style={{ borderRadius: '10px 10px 10px 4px' }}>
                         <div className="w-3 h-3 rounded-full bg-white/20 backdrop-blur-sm" />
                     </div>
                 </button>
-                
+
                 {/* Title & Subtitle */}
                 <div className="flex flex-col min-w-0 mr-4">
-                    <div className="flex items-center gap-1.5 cursor-pointer group">
-                        <span className="text-[14px] font-semibold text-foreground truncate group-hover:text-foreground/80 transition-colors">
-                            {projectName}
-                        </span>
-                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    <div 
+                        className="flex items-center gap-1.5 cursor-pointer group" 
+                        onClick={() => {
+                            setEditedName(projectName)
+                            setIsEditingName(true)
+                        }}
+                    >
+                        {isEditingName ? (
+                            <input 
+                                autoFocus
+                                value={editedName}
+                                onChange={(e) => setEditedName(e.target.value)}
+                                onBlur={handleSaveName}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveName()
+                                    if (e.key === 'Escape') {
+                                        setEditedName(projectName)
+                                        setIsEditingName(false)
+                                    }
+                                }}
+                                className="text-[14px] font-semibold text-foreground bg-transparent outline-none border-b border-primary/50 w-[150px]"
+                            />
+                        ) : (
+                            <>
+                                <span className="text-[14px] font-semibold text-foreground truncate group-hover:text-foreground/80 transition-colors">
+                                    {projectName}
+                                </span>
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                            </>
+                        )}
                     </div>
                     <span className="text-[12px] text-muted-foreground truncate font-medium flex items-center gap-1.5">
                         {isReady ? "Ready to edit" :
-                            isBootingContainer ? "Loading Live Preview…" : statusMessage}
+                            isBootingContainer ? "Loading live preview…" : statusMessage}
                     </span>
                 </div>
 
@@ -67,10 +112,31 @@ export function StudioHeader({
                     <button aria-label="Toggle Chat" onClick={onToggleChat} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ml-1 ${isChatExpanded ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"}`}>
                         <PanelLeft className="w-[18px] h-[18px]" />
                     </button>
+                    {/* New Project button */}
+                    <button
+                        aria-label="New project"
+                        onClick={onBack}
+                        className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg border border-border/60 bg-background hover:bg-secondary/80 text-[13px] font-medium text-muted-foreground hover:text-foreground shadow-sm transition-all"
+                    >
+                        <Plus className="w-[14px] h-[14px]" />
+                        New
+                    </button>
                 </div>
             </div>
 
             <div className="flex items-center justify-end gap-3 min-w-0">
+                {/* Hard reset button — visible during boot, ready, or error states */}
+                {(isBootingContainer || isReady || !!error) && onHardReset && (
+                    <button
+                        aria-label="Hard reload container"
+                        onClick={onHardReset}
+                        title="Clear caches and restart container"
+                        className="inline-flex items-center justify-center rounded-lg border border-border/60 bg-background hover:bg-secondary/80 w-8 h-8 text-muted-foreground hover:text-foreground shadow-sm transition-all"
+                    >
+                        <RotateCcw className="h-[15px] w-[15px]" />
+                    </button>
+                )}
+
                 {/* Right side tools */}
                 {isReady && (
                     <div className="flex items-center gap-1.5">
