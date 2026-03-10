@@ -54,24 +54,25 @@ const BASE_PACKAGE_JSON = {
         "@types/react": "^19.0.6",
         "@types/react-dom": "^19.0.3",
         "@vitejs/plugin-react": "^4.3.4",
-        autoprefixer: "^10.4.21",
-        postcss: "^8.5.3",
-        tailwindcss: "^3.4.17",
+        tailwindcss: "4.1.18",
+        "@tailwindcss/vite": "4.1.18",
         typescript: "~5.7.2",
-        vite: "^5.4.11",
+        vite: "^6.1.0",
     },
     overrides: {
         "rollup": "npm:@rollup/wasm-node",
-        "esbuild": "npm:esbuild-wasm@^0.21.5"
+        "esbuild": "npm:esbuild-wasm@^0.21.5",
+        "lightningcss": "npm:lightningcss-wasm@^1.29.1"
     }
 };
 
 const VITE_CONFIG = `import path from "path"
+import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -94,22 +95,9 @@ export default defineConfig({
 })
 `;
 
-const POSTCSS_CONFIG = `export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-`;
 
-const TAILWIND_CONFIG = `/** @type {import('tailwindcss').Config} */
-export default {
-  darkMode: "class",
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
-  theme: { extend: {} },
-  plugins: [],
-};
-`;
+
+
 
 const TSCONFIG = JSON.stringify(
     {
@@ -203,10 +191,7 @@ createRoot(document.getElementById("root")!).render(
 )
 `;
 
-const INDEX_CSS = `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-`;
+const INDEX_CSS = `@import "tailwindcss";`;
 
 // ════════════════════════════════════════════════════
 // SYMLINK RESOLVER
@@ -349,8 +334,7 @@ async function main() {
         writeFileSync(join(tempDir, "tsconfig.app.json"), TSCONFIG_APP);
         writeFileSync(join(tempDir, "tsconfig.node.json"), TSCONFIG_NODE);
         writeFileSync(join(tempDir, "index.html"), INDEX_HTML);
-        writeFileSync(join(tempDir, "postcss.config.js"), POSTCSS_CONFIG);
-        writeFileSync(join(tempDir, "tailwind.config.ts"), TAILWIND_CONFIG);
+        
 
         // Create src directory
         mkdirSync(join(tempDir, "src"), { recursive: true });
