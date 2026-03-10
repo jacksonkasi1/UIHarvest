@@ -331,8 +331,8 @@ async function _startDevServer(
     onEvent({ type: "terminal", message: `> cache test: ${lsOut.includes("No such file") ? "MISSING" : "EXISTS"}` })
     // --- END DEBUG ---
 
-    onEvent({ type: "dev-start", message: "Starting dev server (npm run dev)…" })
-    const devProcess = await wc.spawn("npm", ["run", "dev"])
+    onEvent({ type: "dev-start", message: "Starting dev server…" })
+    const devProcess = await wc.spawn("node", ["./node_modules/vite/bin/vite.js", "--host", "0.0.0.0"])
 
     const decoder = new TextDecoder()
     const devOutputReader = devProcess.output.getReader()
