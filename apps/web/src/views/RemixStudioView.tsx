@@ -53,7 +53,8 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
         setRefreshKey, 
         handleSendMessage, 
         handleStop, 
-        chatInputRef 
+        chatInputRef,
+        RuntimeProvider,
     } = useRemixChat(jobId, containerReady, setFiles, setContainerLogs)
 
     const isReady = phase === "ready"
@@ -99,6 +100,7 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
     }
 
     return (
+        <RuntimeProvider>
         <div className="flex h-dvh w-full flex-col bg-background text-foreground overflow-hidden font-sans">
             <StudioHeader 
                 isReady={isReady}
@@ -156,5 +158,6 @@ export function RemixStudioView({ jobId, onBack }: RemixStudioProps) {
                 />
             </div>
         </div>
+        </RuntimeProvider>
     )
 }
