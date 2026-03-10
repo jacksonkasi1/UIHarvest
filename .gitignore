@@ -8,3 +8,4 @@ build/
 package-lock.json
 # Generated WebContainer snapshots (large binaries, built at deploy time)
 web/public/base-snapshot.bin
+apps/scraper/web/public/base-snapshot.bin
