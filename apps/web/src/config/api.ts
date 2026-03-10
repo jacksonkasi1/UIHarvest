@@ -8,9 +8,8 @@ export const apiRoutes = {
   // Scraper-originated job routes (bootstrap progress + initial files)
   remixFiles: (jobId: string) => `${API_BASE}/api/remix/${jobId}/files`,
   remixProgress: (jobId: string) => `${API_BASE}/api/remix/${jobId}/progress`,
-  remixChat: (jobId: string) => `${API_BASE}/api/remix/${jobId}/chat`,
 
-  // Studio chat (apps/server — Phase 3+)
+  // Studio chat (apps/server)
   chat: (jobId: string) => `${API_BASE}/api/chat/${jobId}`,
   chatFiles: (jobId: string) => `${API_BASE}/api/chat/${jobId}/files`,
 }

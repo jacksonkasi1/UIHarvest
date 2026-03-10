@@ -18,9 +18,6 @@ import { RemixCodeGenerator } from "./codegen/generator.js";
 import { buildSystemPrompt } from "./codegen/system-prompt.js";
 import { jobStore } from "../store/job-store.js";
 
-// ** import types (chat)
-import type { ChatHandlerDeps, ConversationMessage } from "./chat-handler.js";
-
 // ** import types
 import type {
     RemixJob,
@@ -145,13 +142,6 @@ export class RemixManager {
         this.jobs.set(id, job);
         this.generators.set(id, generator);
 
-        // Restore conversation history if present
-        if (pj.conversationHistory && pj.conversationHistory.length > 0) {
-            // Imported dynamically to avoid circular deps
-            const { restoreConversation } = await import("./chat-handler.js");
-            restoreConversation(id, pj.conversationHistory);
-        }
-
         console.log(`[RemixManager] Restored job ${id} from Firestore (${files.length} files)`);
         return job;
     }
@@ -221,40 +211,6 @@ export class RemixManager {
             });
             return null;
         }
-    }
-
-    /**
-     * Get chat handler dependencies for a job.
-     * Returns null if job doesn't exist or isn't ready.
-     * NOTE: For cold-start recovery, use getOrHydrate() first.
-     */
-    getChatDeps(id: string): ChatHandlerDeps | null {
-        const job = this.jobs.get(id);
-        const generator = this.generators.get(id);
-        if (!job || !generator || job.status !== "done") return null;
-
-        const spec = job.result?.spec;
-        if (!spec) return null;
-
-        return {
-            jobId: id,
-            spec,
-            files: job.files,
-            codegenSystemPrompt: buildSystemPrompt(spec),
-            onFilesUpdated: (newFiles) => {
-                job.files = newFiles;
-                // Write-through: persist updated files
-                jobStore.save(job).catch(err =>
-                    console.error("[RemixManager] Firestore file update failed:", err.message)
-                );
-            },
-            onConversationUpdated: (messages) => {
-                // Write-through: persist conversation history
-                jobStore.save(job, messages).catch(err =>
-                    console.error("[RemixManager] Firestore conversation update failed:", err.message)
-                );
-            },
-        };
     }
 
     // ════════════════════════════════════════════════════

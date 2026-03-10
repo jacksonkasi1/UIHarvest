@@ -239,6 +239,8 @@ export async function handleChat(options: ChatHandlerOptions): Promise<void> {
     if (!signal.aborted && fullText) {
       sendSSE(res, { type: "text", content: fullText, partial: false })
     }
+
+    sendSSE(res, { type: "done" })
   } catch (err) {
     if ((err as Error).name === "AbortError") return
     console.error("[chat-handler] streamText error:", (err as Error).message)
@@ -246,7 +248,7 @@ export async function handleChat(options: ChatHandlerOptions): Promise<void> {
       type: "error",
       error: `Something went wrong: ${(err as Error).message}`,
     })
+    // Send done after error so frontend knows the stream is finished
+    sendSSE(res, { type: "done" })
   }
-
-  sendSSE(res, { type: "done" })
 }

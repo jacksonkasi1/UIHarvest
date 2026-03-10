@@ -1,6 +1,5 @@
 // ** import types
 import type { ColorRole, ComponentType } from "../memory/ir/types.js";
-import type { ConversationMessage } from "./chat-handler.js";
 
 // ════════════════════════════════════════════════════
 // BRAND IDENTITY
@@ -160,5 +159,4 @@ export interface RemixJob {
     files: GeneratedFile[];
     createdAt: number;
     listeners: Set<(event: RemixProgressEvent) => void>;
-    conversationHistory?: ConversationMessage[];
 }

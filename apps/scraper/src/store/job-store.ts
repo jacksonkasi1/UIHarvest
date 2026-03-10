@@ -3,7 +3,6 @@ import { Firestore, FieldValue } from "@google-cloud/firestore";
 
 // ** import types
 import type { RemixJob, RemixResult } from "../remix/types.js";
-import type { ConversationMessage } from "../remix/chat-handler.js";
 
 // ** import constants
 import { firestoreConfig } from "../config.js";
@@ -28,7 +27,6 @@ interface PersistedJob {
     targetUrl?: string;
     initialPrompt?: string;
     result: RemixResult | null;
-    conversationHistory?: ConversationMessage[];
 }
 
 class JobStore {
@@ -61,7 +59,7 @@ class JobStore {
      * Save/update a job in Firestore (write-through).
      * Files are stored in a separate document to avoid 1MB Firestore limit.
      */
-    async save(job: RemixJob, conversationHistory?: ConversationMessage[]): Promise<void> {
+    async save(job: RemixJob): Promise<void> {
         if (!this.db) return;
 
         try {
@@ -75,7 +73,6 @@ class JobStore {
                 targetUrl: job.targetUrl,
                 initialPrompt: job.initialPrompt,
                 result: job.result,
-                conversationHistory: conversationHistory?.slice(-20), // last 20 messages
             };
 
             await this.db.collection(COLLECTION).doc(job.id).set(persisted, { merge: true });
@@ -137,7 +134,7 @@ class JobStore {
     /**
      * List all persisted jobs (for dashboard).
      */
-    async listJobs(): Promise<Omit<PersistedJob, "result" | "conversationHistory">[]> {
+    async listJobs(): Promise<Omit<PersistedJob, "result">[]> {
         if (!this.db) return [];
 
         try {

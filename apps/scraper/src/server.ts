@@ -17,9 +17,6 @@ import { appConfig, isProduction } from "./config.js";
 import type { ProgressEvent } from "./extract-pipeline.js";
 import type { RemixProgressEvent } from "./remix/types.js";
 
-// ** import apis (chat)
-import { handleChatMessage } from "./remix/chat-handler.js";
-
 // ════════════════════════════════════════════════════
 // MEMORY INDEX HELPERS (preserved from original)
 // ════════════════════════════════════════════════════
@@ -637,84 +634,6 @@ export function startServer(
     }
 
     res.json({ files });
-  });
-
-  // ── Streaming Chat API (SSE) ───────────────────────────────────────────────
-  app.post("/api/remix/:id/chat", authMiddleware, async (req, res) => {
-    try {
-      const { prompt, images, mode } = req.body;
-      if (!prompt || typeof prompt !== "string") {
-        res.status(400).json({ error: "prompt is required" });
-        return;
-      }
-
-      // Hydrate from Firestore on cold-start (memory miss)
-      if (!remixManager.get(req.params.id)) {
-        await remixManager.getOrHydrate(req.params.id);
-      }
-      const chatDeps = remixManager.getChatDeps(req.params.id);
-      if (!chatDeps) {
-        res.status(404).json({ error: "Job not found or not ready" });
-        return;
-      }
-
-      // SSE headers
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders();
-
-      // Send initial SSE comment to prime the connection
-      res.write(": connected\n\n");
-      if (typeof (res as any).flush === "function") (res as any).flush();
-
-      // Keepalive to prevent proxy timeout
-      const keepAlive = setInterval(() => {
-        if (!res.writableEnded) {
-          res.write(": keep-alive\n\n");
-          if (typeof (res as any).flush === "function") (res as any).flush();
-        }
-      }, 15_000);
-
-      // Abort controller — only truly abort when client disconnects AFTER we've
-      // started streaming (not from Cloud Run's premature 'close' event on connect).
-      const controller = new AbortController();
-      req.on("close", () => {
-        // Due to Cloud Run reverse proxy quirks, 'close' may fire prematurely
-        // right after reading the POST body. We NEVER abort the backend generation layer.
-        // If the client truly disconnects, the connection will drop but the generation
-        // finishes gracefully and saves to Firestore.
-        clearInterval(keepAlive);
-      });
-
-      const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
-
-      try {
-        await handleChatMessage(
-          res,
-          prompt,
-          imageAttachments,
-          mode,
-          chatDeps,
-          controller.signal
-        );
-      } catch (err) {
-        console.error("[chat-endpoint] Error:", (err as Error).message);
-        if (!res.writableEnded) {
-          res.write(`data: ${JSON.stringify({ type: "error", error: (err as Error).message })}\n\n`);
-          if (typeof (res as any).flush === "function") (res as any).flush();
-        }
-      }
-
-      clearInterval(keepAlive);
-      if (!res.writableEnded) {
-        res.end();
-      }
-    } catch (err) {
-      console.error("[server] /chat error:", (err as Error).message);
-      if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
-    }
   });
 
   app.get("/api/remix/:id/status", authMiddleware, (req, res) => {

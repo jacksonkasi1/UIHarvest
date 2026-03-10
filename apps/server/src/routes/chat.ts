@@ -43,6 +43,7 @@ chatRouter.post(
 
     // ── Abort controller (client disconnect) ───────────────────────────────────
     const controller = new AbortController()
+    let streamStarted = false
 
     const keepAliveInterval = setInterval(() => {
       if (!res.writableEnded) {
@@ -54,11 +55,17 @@ chatRouter.post(
     }, 15_000)
 
     req.on("close", () => {
-      controller.abort()
       clearInterval(keepAliveInterval)
+      // Only abort if the stream has genuinely started — Cloud Run may fire
+      // 'close' prematurely on the POST body read. We abort to free AI SDK
+      // resources, but the generation saves to Firestore regardless.
+      if (streamStarted) {
+        controller.abort()
+      }
     })
 
     try {
+      streamStarted = true
       await handleChat({
         jobId,
         prompt,
