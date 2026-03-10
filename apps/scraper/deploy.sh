@@ -19,21 +19,25 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ -f "${SCRIPT_DIR}/../../.env" ]; then
-  echo "📄  Loading root .env file…"
+# Load variables from an env file, skipping already-set vars.
+load_env_file() {
+  local env_file="$1"
+  local label="$2"
+  [ -f "$env_file" ] || return 0
+  echo "📄  Loading ${label}…"
   while IFS='=' read -r key value; do
     [[ -z "$key" || "$key" =~ ^# ]] && continue
     key="$(echo "$key" | xargs)"
     value="$(echo "$value" | xargs)"
-    value="${value%\"}"
-    value="${value#\"}"
-    value="${value%\'}"
-    value="${value#\'}"
-    if [ -z "${!key:-}" ]; then
-      export "$key=$value"
-    fi
-  done < "${SCRIPT_DIR}/../../.env"
-fi
+    value="${value%\"}" ; value="${value#\"}"
+    value="${value%\'}" ; value="${value#\'}"
+    [ -z "${!key:-}" ] && export "$key=$value"
+  done < "$env_file"
+}
+
+# Local scraper .env takes highest precedence; root .env fills in any missing vars.
+load_env_file "${SCRIPT_DIR}/.env"        "scraper .env file"
+load_env_file "${SCRIPT_DIR}/../../.env"  "root .env file"
 
 SERVICE_NAME="${SERVICE_NAME:-uiharvest-scraper}"
 GCP_REGION="${GCP_REGION:-asia-south1}"
@@ -70,7 +74,6 @@ echo "🚀  Deploying ${SERVICE_NAME} to Cloud Run (${GCP_REGION})…"
 
 gcloud run deploy "${SERVICE_NAME}" \
   --source "${SCRIPT_DIR}" \
-  --no-cache \
   --region "${GCP_REGION}" \
   --allow-unauthenticated \
   --memory 8Gi \

@@ -8,6 +8,7 @@
     "start": "bun run src/serve.ts",
     "build": "bun run --cwd web build",
     "build:snapshot": "bun run scripts/generate-base-snapshot.ts",
+    "deploy": "./deploy.sh",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
