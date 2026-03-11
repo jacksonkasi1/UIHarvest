@@ -39,6 +39,12 @@ cp .env.example .env
 
 Without this key the AI Vision pass (Phase 1.5) and Design Memory (Phase 2) are automatically skipped. The base scraping and extraction always run regardless.
 
+## ✅ Reproducible Testing (Devpost)
+
+Reproducible testing instructions for the submitted scraper app are documented in:
+
+- `apps/scraper/README.md`
+
 ## 🌐 Web App
 
 UIHarvest also runs as a deployed web application — enter a URL in the browser and get the full extraction.

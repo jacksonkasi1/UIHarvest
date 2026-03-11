@@ -12,6 +12,7 @@ import { serverConfig } from "./config.js"
 // ** import apis
 import { authRouter } from "./routes/auth.js"
 import { chatRouter } from "./routes/chat.js"
+import { projectsRouter } from "./routes/projects.js"
 
 const app = express()
 const port = serverConfig.port
@@ -36,6 +37,7 @@ app.use(cookieParser())
 
 app.use("/api/auth", authRouter)
 app.use("/api", chatRouter)
+app.use("/api", projectsRouter)
 
 // ── Health check ─────────────────────────────────────────────────────────────
 
