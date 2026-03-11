@@ -8,6 +8,8 @@ import os from "os";
 
 // ** import apis
 import { runExtraction } from "./extract-pipeline.js";
+import { createJobRecord, updateJobStatus } from "./firestore-store.js";
+import { uploadJobDir } from "./gcs-store.js";
 
 // ** import types
 import type { ProgressEvent, ExtractionResult } from "./extract-pipeline.js";
@@ -65,6 +67,11 @@ export class JobManager {
         };
 
         this.jobs.set(id, job);
+
+        // Persist to Firestore (fire-and-forget — don't block job start)
+        createJobRecord(id, url, pages).catch((err) =>
+            console.warn(`[firestore] Failed to create job record: ${err}`)
+        );
 
         // Start extraction in the background (fire-and-forget)
         this.runJob(job, runMemory);
@@ -128,6 +135,18 @@ export class JobManager {
 
             job.result = result;
             job.status = result.success ? "done" : "error";
+
+            // Persist status + upload to GCS
+            const finalStatus = result.success ? "done" : "error";
+            await updateJobStatus(job.id, finalStatus).catch((err) =>
+                console.warn(`[firestore] Failed to update job status: ${err}`)
+            );
+
+            if (result.success) {
+                uploadJobDir(job.id, job.outputDir).catch((err) =>
+                    console.warn(`[gcs] Failed to upload job dir: ${err}`)
+                );
+            }
         } catch (err) {
             const errorEvent: ProgressEvent = {
                 phase: "error",
@@ -141,6 +160,10 @@ export class JobManager {
                 } catch { }
             }
             job.status = "error";
+
+            await updateJobStatus(job.id, "error").catch((e) =>
+                console.warn(`[firestore] Failed to update job status: ${e}`)
+            );
         }
     }
 

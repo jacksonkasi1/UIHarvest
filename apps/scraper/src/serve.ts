@@ -1,5 +1,8 @@
 import "dotenv/config";
 
+// ** import utils
+import path from "node:path";
+
 // ** import apis
 import { startServer } from "./server.js";
 
@@ -11,4 +14,4 @@ import { startServer } from "./server.js";
 // via the /api/extract endpoint.
 // ════════════════════════════════════════════════════
 
-startServer();
+startServer(undefined, undefined, path.resolve(process.cwd(), "apps", "scraper"));

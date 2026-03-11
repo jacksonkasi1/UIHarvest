@@ -1,9 +1,9 @@
 // ** import core packages
-import { useEffect, useMemo, useState } from "react"
-import { Activity, XCircle, Wand2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Activity, XCircle } from "lucide-react"
 
 // ** import types
-import type { DesignSystemData, MemoryDocumentGroup } from "@/types/design-system"
+import type { DesignSystemData, MemoryDocumentGroup, MemoryDocumentItem } from "@/types/design-system"
 
 // ** import components
 import { Sidebar } from "@/components/Sidebar"
@@ -20,6 +20,7 @@ import { PasswordView } from "@/views/PasswordView"
 import { LandingView } from "@/views/LandingView"
 import { ProgressView } from "@/views/ProgressView"
 import { PageSelectorView } from "@/views/PageSelectorView"
+import { MemoryView } from "@/views/MemoryView"
 
 // ** import types
 import type { PageInfo } from "@/views/PageSelectorView"
@@ -45,16 +46,47 @@ import {
   LayoutSystemView,
   PseudoElementsView,
   VideosView,
-  MemoryView,
-  RemixLandingView,
-  DashboardView,
 } from "./views"
 
 // ════════════════════════════════════════════════════
 // APP MODES
 // ════════════════════════════════════════════════════
 
-type AppMode = "checking" | "password" | "dashboard" | "landing" | "page-selection" | "progress" | "explorer" | "remix-landing"
+type AppMode = "checking" | "password" | "landing" | "page-selection" | "progress" | "explorer"
+
+function normalizeDesignData(payload: any): DesignSystemData {
+  return {
+    meta: payload?.meta ?? { title: "", url: "", viewport: { width: 0, height: 0 }, fullHeight: 0 },
+    tokens: {
+      colors: payload?.tokens?.colors ?? [],
+      gradients: payload?.tokens?.gradients ?? [],
+      typography: payload?.tokens?.typography ?? [],
+      spacing: payload?.tokens?.spacing ?? [],
+      radii: payload?.tokens?.radii ?? [],
+      shadows: payload?.tokens?.shadows ?? [],
+      borders: payload?.tokens?.borders ?? [],
+      transitions: payload?.tokens?.transitions ?? [],
+    },
+    components: payload?.components ?? [],
+    patterns: payload?.patterns ?? [],
+    sections: payload?.sections ?? [],
+    assets: {
+      images: payload?.assets?.images ?? [],
+      svgs: payload?.assets?.svgs ?? [],
+      videos: payload?.assets?.videos ?? [],
+      pseudoElements: payload?.assets?.pseudoElements ?? [],
+    },
+    interactions: {
+      hoverStates: payload?.interactions?.hoverStates ?? [],
+    },
+    cssVariables: payload?.cssVariables ?? [],
+    fontFaces: payload?.fontFaces ?? [],
+    layoutSystem: {
+      containerWidths: payload?.layoutSystem?.containerWidths ?? [],
+    },
+    fullPageScreenshot: payload?.fullPageScreenshot,
+  }
+}
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("checking")
@@ -62,8 +94,6 @@ export default function App() {
   // Explorer state
   const [data, setData] = useState<DesignSystemData | null>(null)
   const [memoryGroups, setMemoryGroups] = useState<MemoryDocumentGroup[]>([])
-  const [memoryContent, setMemoryContent] = useState("")
-  const [memoryLoading, setMemoryLoading] = useState(false)
   const [error, _setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -77,9 +107,8 @@ export default function App() {
 
   // Job tracking
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
-
-  // Active job API base (for explorer mode after extraction)
-  const [jobApiBase, setJobApiBase] = useState<string | null>(null)
+  const [memoryMarkdown, setMemoryMarkdown] = useState("")
+  const [memoryLoading, setMemoryLoading] = useState(false)
 
   // Page selection state
   const [discoveredPages, setDiscoveredPages] = useState<PageInfo[]>([])
@@ -131,94 +160,39 @@ export default function App() {
             setMode("progress")
           } else {
             localStorage.removeItem("uih_jobId")
-            setMode("dashboard")
+            setMode("landing")
           }
         })
         .catch(() => {
-          localStorage.removeItem("uih_jobId")
-          setMode("dashboard")
+          setActiveJobId(savedJobId)
+          setMode("progress")
         })
     } else {
-      setMode("dashboard")
+      setMode("landing")
     }
   }
-
-  const tryLoadLegacyExplorer = () => {
-    // Try to load legacy /api/design-system (CLI mode)
-    fetch("/api/design-system")
-      .then((res) => {
-        if (!res.ok) throw new Error("No data")
-        return res.json()
-      })
-      .then((json) => {
-        setData(json)
-        setLoading(false)
-        setMode("explorer")
-        // Also load memory
-        fetch("/api/memory")
-          .then((res) => (res.ok ? res.json() : { groups: [] }))
-          .then((memory) => setMemoryGroups(memory.groups ?? []))
-          .catch(() => { })
-      })
-      .catch(() => {
-        // No legacy data — show dashboard instead of landing
-        setLoading(false)
-        setMode("dashboard")
-      })
-  }
-
-  const handleDashboardNavigate = (targetMode: 'explorer' | 'landing' | 'remix-landing') => {
-    if (targetMode === 'explorer') {
-      tryLoadLegacyExplorer()
-    } else {
-      setMode(targetMode)
-    }
-  }
-
-  // ── Memory content loading (explorer mode) ──────────────────────────
-  useEffect(() => {
-    if (mode !== "explorer") return
-    if (!activeTab.startsWith("memory:")) {
-      setMemoryContent("")
-      setMemoryLoading(false)
-      return
-    }
-
-    const docPath = activeTab.replace(/^memory:/, "")
-    if (!docPath) return
-
-    setMemoryLoading(true)
-
-    const apiPath = jobApiBase
-      ? `${jobApiBase}/memory/content?path=${encodeURIComponent(docPath)}`
-      : `/api/memory/content?path=${encodeURIComponent(docPath)}`
-
-    fetch(apiPath)
-      .then((res) => {
-        if (!res.ok) throw new Error("Not found")
-        return res.json()
-      })
-      .then((json) => {
-        setMemoryContent(json.content ?? "")
-        setMemoryLoading(false)
-      })
-      .catch(() => {
-        setMemoryContent("")
-        setMemoryLoading(false)
-      })
-  }, [activeTab, mode, jobApiBase])
 
   const activeMemoryPath = activeTab.startsWith("memory:")
     ? activeTab.replace(/^memory:/, "")
     : null
+  const activeMemoryDoc: MemoryDocumentItem | null = activeMemoryPath
+    ? memoryGroups.flatMap((group) => group.items).find((item) => item.path === activeMemoryPath) ?? null
+    : null
 
-  const activeMemoryDoc = useMemo(
-    () =>
-      memoryGroups
-        .flatMap((group) => group.items)
-        .find((item) => item.path === activeMemoryPath) ?? null,
-    [memoryGroups, activeMemoryPath]
-  )
+  useEffect(() => {
+    if (!activeMemoryPath || !activeJobId) {
+      setMemoryMarkdown("")
+      setMemoryLoading(false)
+      return
+    }
+
+    setMemoryLoading(true)
+    fetch(`/api/extract/${activeJobId}/memory/content?path=${encodeURIComponent(activeMemoryPath)}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load memory"))))
+      .then((payload) => setMemoryMarkdown(String(payload.content ?? "")))
+      .catch(() => setMemoryMarkdown(""))
+      .finally(() => setMemoryLoading(false))
+  }, [activeJobId, activeMemoryPath])
 
   // ── Handlers ────────────────────────────────────────────────────────
 
@@ -248,52 +222,54 @@ export default function App() {
     }
   }
 
-  const handleViewExplorer = (resultData: any) => {
-    setData(resultData)
+  const handleViewExplorer = (resultData: any, jobIdOverride?: string) => {
+    setData(normalizeDesignData(resultData))
     setLoading(false)
     setMode("explorer")
 
     // Load memory from job endpoint
-    if (activeJobId) {
-      setJobApiBase(`/api/extract/${activeJobId}`)
-      fetch(`/api/extract/${activeJobId}/memory`)
+    const jobId = jobIdOverride ?? activeJobId
+    if (jobId) {
+      fetch(`/api/extract/${jobId}/memory`)
         .then((res) => (res.ok ? res.json() : { groups: [] }))
         .then((memory) => setMemoryGroups(memory.groups ?? []))
         .catch(() => { })
     }
   }
 
+  const handleOpenJob = async (jobId: string) => {
+    setActiveJobId(jobId)
+
+    // Check if job is still running — go to ProgressView either way.
+    // ProgressView handles "done" state (shows View Explorer button immediately)
+    // and fetches the result only when the user clicks it.
+    try {
+      const statusRes = await fetch(`/api/extract/${jobId}/status`, { credentials: "include" })
+      if (statusRes.ok) {
+        const jobStatus = await statusRes.json()
+        // For done jobs, set isDone flag via localStorage so ProgressView
+        // skips SSE and goes straight to done state
+        if (jobStatus.status === "done") {
+          localStorage.setItem(`uih_done_${jobId}`, "1")
+        }
+      }
+    } catch {
+      // Ignore — ProgressView will handle the SSE fallback
+    }
+
+    setMode("progress")
+  }
+
   const handleBackToLanding = () => {
     setActiveJobId(null)
-    setJobApiBase(null)
+    setMemoryMarkdown("")
+    setMemoryLoading(false)
     setDiscoveredPages([])
     setSelectedUrl("")
-    setMode("dashboard")
+    setMode("landing")
   }
 
-  // ── Remix Handlers ──────────────────────────────────────────────────
-
-  const handleStartRemix = async (referenceUrl: string, targetUrl: string) => {
-    try {
-      const res = await fetch("/api/remix", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referenceUrl, targetUrl: targetUrl || undefined }),
-      })
-      const data = await res.json()
-      if (data.jobId) {
-        // Redirect to AI Studio app with the new job ID
-        const studioUrl = `${import.meta.env.VITE_STUDIO_URL ?? ""}/studio/${data.jobId}`
-        window.location.href = studioUrl
-      }
-    } catch (err) {
-      console.error("Failed to start remix:", err)
-    }
-  }
-
-  // ════════════════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════════════════
+// ── Handlers ────────────────────────────────────────────────────────
 
   // Checking auth status
   if (mode === "checking") {
@@ -309,11 +285,6 @@ export default function App() {
     return <PasswordView onAuthenticated={handleAuthenticated} />
   }
 
-  // Dashboard
-  if (mode === "dashboard") {
-    return <DashboardView onNavigate={handleDashboardNavigate} />
-  }
-
   // Landing page
   if (mode === "landing") {
     return (
@@ -321,16 +292,7 @@ export default function App() {
         onPagesDiscovered={handlePagesDiscovered}
         existingJobId={localStorage.getItem("uih_jobId")}
         onResumeJob={handleResumeJob}
-      />
-    )
-  }
-
-  // Remix landing
-  if (mode === "remix-landing") {
-    return (
-      <RemixLandingView
-        onStartRemix={handleStartRemix}
-        onBack={handleBackToLanding}
+        onOpenJob={handleOpenJob}
       />
     )
   }
@@ -409,13 +371,6 @@ export default function App() {
           <main className="flex-1 overflow-y-auto bg-background p-8 scroll-smooth lg:p-12 relative w-full flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <SidebarTrigger />
-              <button
-                className="flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-                onClick={() => setMode("remix-landing")}
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                Remix
-              </button>
             </div>
             <div className="mx-auto max-w-6xl w-full space-y-8 mt-6 lg:mt-0">
               {activeTab === "overview" && <OverviewView data={data} uniqueVariants={uniqueVariants} />}
@@ -450,13 +405,12 @@ export default function App() {
               {activeTab === "svgs" && <SvgsView data={data} setSelectedSvg={setSelectedSvg} />}
               {activeTab === "pseudos" && <PseudoElementsView data={data} />}
               {activeTab === "videos" && <VideosView data={data} />}
-
               {activeTab.startsWith("memory:") && (
                 <MemoryView
                   data={data}
                   groups={memoryGroups}
                   activeDoc={activeMemoryDoc}
-                  markdown={memoryContent}
+                  markdown={memoryMarkdown}
                   loading={memoryLoading}
                 />
               )}

@@ -208,6 +208,17 @@ function buildSummary(rawData: any, fontFileCount: number): ExtractionSummary {
     };
 }
 
+function writeFallbackMemory(outputDir: string, rawData: any): string {
+    const memoryDir = path.join(outputDir, "design-memory");
+    fs.mkdirSync(memoryDir, { recursive: true });
+
+    const content = `# Design Memory\n\nThis file was generated automatically as a fallback memory document.\n\n## Source\n- URL: ${rawData?.meta?.url ?? "unknown"}\n- Title: ${rawData?.meta?.title ?? "unknown"}\n\n## Extracted Summary\n- Colors: ${rawData?.tokens?.colors?.length ?? 0}\n- Typography tokens: ${rawData?.tokens?.typography?.length ?? 0}\n- Spacing tokens: ${rawData?.tokens?.spacing?.length ?? 0}\n- Components: ${rawData?.components?.length ?? 0}\n- Sections: ${rawData?.sections?.length ?? 0}\n- Images: ${rawData?.assets?.images?.length ?? 0}\n- SVGs: ${rawData?.assets?.svgs?.length ?? 0}\n\n## Notes\nGemini-backed memory generation was unavailable or failed for this run, so a baseline memory document was created to keep memory output available in the UI.\n`;
+
+    const outputPath = path.join(memoryDir, "INSTRUCTIONS.md");
+    fs.writeFileSync(outputPath, content);
+    return memoryDir;
+}
+
 // ════════════════════════════════════════════════════
 // PAGE DISCOVERY
 // ════════════════════════════════════════════════════
@@ -1189,11 +1200,35 @@ export async function runExtraction(
                     progress: 95,
                 });
             } catch (err) {
+                const fallbackDir = writeFallbackMemory(outputDir, rawData);
+                analysis = {
+                    memoryOutputs: fallbackDir,
+                    aiUsage: {
+                        calls: gemini.calls,
+                        tokens: gemini.usage.totalTokens,
+                    },
+                };
                 emit({
                     phase: "memory",
-                    message: `Design memory generation failed: ${(err as Error).message}`,
+                    message: `Design memory generation failed; fallback memory created: ${(err as Error).message}`,
                 });
             }
+        } else if (runMemory) {
+            const fallbackDir = writeFallbackMemory(outputDir, rawData);
+            analysis = {
+                memoryOutputs: fallbackDir,
+                aiUsage: {
+                    calls: gemini.calls,
+                    tokens: gemini.usage.totalTokens,
+                },
+            };
+            emit({
+                phase: "memory",
+                message: gemini.isAvailable
+                    ? "Design memory generated with local fallback"
+                    : "Gemini unavailable; generated fallback design memory",
+                progress: 95,
+            });
         } else {
             emit({
                 phase: "memory",

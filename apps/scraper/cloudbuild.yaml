@@ -1,0 +1,14 @@
+steps:
+  - name: gcr.io/kaniko-project/executor:latest
+    args:
+      - --dockerfile=apps/scraper/Dockerfile
+      - --context=dir://.
+      - --destination=${_IMAGE_URI}
+      - --cache=true
+      - --cache-repo=${_CACHE_REPO}
+      - --cache-ttl=168h
+
+timeout: 3600s
+
+options:
+  machineType: E2_HIGHCPU_8

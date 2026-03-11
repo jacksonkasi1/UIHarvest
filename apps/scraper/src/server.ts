@@ -4,18 +4,28 @@ import cookieParser from "cookie-parser";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 // ** import apis
 import { JobManager } from "./job-manager.js";
 import { streamTarGz } from "./zip-builder.js";
 import { discoverPages } from "./extract-pipeline.js";
-import { RemixManager } from "./remix/remix-manager.js";
-import { jobStore } from "./store/job-store.js";
 import { appConfig, isProduction } from "./config.js";
+import {
+  listJobRecords,
+  getJobRecord,
+  deleteJobRecord,
+} from "./firestore-store.js";
+import {
+  readFileFromGCS,
+  downloadJobDir,
+  deleteJobFromGCS,
+  jobExistsInGCS,
+  streamFileToResponse,
+} from "./gcs-store.js";
 
 // ** import types
 import type { ProgressEvent } from "./extract-pipeline.js";
-import type { RemixProgressEvent } from "./remix/types.js";
 
 // ════════════════════════════════════════════════════
 // MEMORY INDEX HELPERS (preserved from original)
@@ -153,6 +163,40 @@ function resolveMemoryFile(
   return resolved;
 }
 
+/**
+ * Resolve outputDir for a job:
+ *  1. In-process job map
+ *  2. Ephemeral disk (tmpdir) — same instance, job evicted from map
+ *  3. Returns null (caller should fall back to GCS)
+ */
+function getOutputDirForJob(jobManager: JobManager, jobId: string): string | null {
+  const job = jobManager.get(jobId);
+  if (job) return job.outputDir;
+
+  const fallbackDir = path.join(os.tmpdir(), `uiharvest-job-${jobId}`);
+  if (fs.existsSync(fallbackDir)) return fallbackDir;
+
+  return null;
+}
+
+/**
+ * Ensure a job's output is available locally — first tries in-memory/disk,
+ * then downloads from GCS into tmpdir if needed.
+ * Returns the local outputDir string, or null if nowhere to be found.
+ */
+async function resolveOutputDir(
+  jobManager: JobManager,
+  jobId: string
+): Promise<string | null> {
+  const local = getOutputDirForJob(jobManager, jobId);
+  if (local) return local;
+
+  // Try GCS
+  const localDir = path.join(os.tmpdir(), `uiharvest-job-${jobId}`);
+  const downloaded = await downloadJobDir(jobId, localDir).catch(() => null);
+  return downloaded;
+}
+
 // ════════════════════════════════════════════════════
 // AUTH MIDDLEWARE
 // ════════════════════════════════════════════════════
@@ -204,12 +248,6 @@ const SSE_RECONNECT_MS = 55 * 60 * 1000; // 55 minutes
 
 /**
  * Start the unified server.
- *
- * When called from CLI (with data + outputDir), it also serves the
- * legacy /api/design-system and /api/memory endpoints.
- *
- * When called standalone (web mode), it serves the compiled frontend
- * and provides the extraction job API.
  */
 export function startServer(
   data?: any,
@@ -219,17 +257,9 @@ export function startServer(
   const app = express();
   const port = appConfig.port;
   const jobManager = new JobManager();
-  const remixManager = new RemixManager();
 
   app.use(express.json({ limit: "50mb" }));
   app.use(cookieParser());
-
-  // WebContainer requires cross-origin isolation (SharedArrayBuffer)
-  app.use((_req, res, next) => {
-    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-    next();
-  });
 
   // ── Auth endpoints ──────────────────────────────────────────────────
 
@@ -266,33 +296,14 @@ export function startServer(
     res.json({ success: true });
   });
 
-  // ── Dashboard Jobs API ───────────────────────────────────────────────────
+  // ── Jobs list (Firestore) ─────────────────────────────────────────
 
-  app.get("/api/jobs", authMiddleware, async (req, res) => {
+  app.get("/api/jobs", authMiddleware, async (_req, res) => {
     try {
-      if (!jobStore.isEnabled) {
-        res.json({ jobs: [] });
-        return;
-      }
-      const jobs = await jobStore.listJobs();
+      const jobs = await listJobRecords();
       res.json({ jobs });
     } catch (err) {
-      console.error("[Dashboard] Failed to list jobs:", err);
-      res.status(500).json({ error: "Failed to load jobs" });
-    }
-  });
-
-  app.delete("/api/jobs/:id", authMiddleware, async (req, res) => {
-    try {
-      if (!jobStore.isEnabled) {
-        res.json({ success: true });
-        return;
-      }
-      await jobStore.delete(req.params.id);
-      res.json({ success: true });
-    } catch (err) {
-      console.error("[Dashboard] Failed to delete job:", err);
-      res.status(500).json({ error: "Failed to delete job" });
+      res.status(500).json({ error: `Failed to list jobs: ${(err as Error).message}` });
     }
   });
 
@@ -321,7 +332,7 @@ export function startServer(
   });
 
   app.post("/api/extract", authMiddleware, (req, res) => {
-    const { url, runMemory, pages } = req.body;
+    const { url, pages } = req.body;
     if (!url || typeof url !== "string") {
       res.status(400).json({ error: "URL is required" });
       return;
@@ -334,28 +345,39 @@ export function startServer(
       return;
     }
 
-    const job = jobManager.create(url, runMemory ?? true, pages);
+    const job = jobManager.create(url, true, pages);
     res.json({ jobId: job.id, status: job.status });
   });
 
-  app.get("/api/extract/:id/status", authMiddleware, (req, res) => {
+  app.get("/api/extract/:id/status", authMiddleware, async (req, res) => {
     const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
+
+    if (job) {
+      const lastEvent =
+        job.events.length > 0
+          ? job.events[job.events.length - 1]
+          : null;
+      res.json({ id: job.id, url: job.url, status: job.status, lastEvent });
       return;
     }
 
-    const lastEvent =
-      job.events.length > 0
-        ? job.events[job.events.length - 1]
-        : null;
+    // Disk fallback
+    const fallbackDir = path.join(os.tmpdir(), `uiharvest-job-${req.params.id}`);
+    if (fs.existsSync(fallbackDir) && fs.existsSync(path.join(fallbackDir, "extraction.json"))) {
+      res.json({ id: req.params.id, status: "done", lastEvent: { phase: "done", message: "Recovered from disk" } });
+      return;
+    }
 
-    res.json({
-      id: job.id,
-      url: job.url,
-      status: job.status,
-      lastEvent,
-    });
+    // Firestore / GCS fallback
+    try {
+      const record = await getJobRecord(req.params.id);
+      if (record) {
+        res.json({ id: record.id, url: record.url, status: record.status, lastEvent: { phase: record.status, message: `Recovered from Firestore: ${record.status}` } });
+        return;
+      }
+    } catch { /* ignore */ }
+
+    res.status(404).json({ error: "Job not found" });
   });
 
   app.get("/api/extract/:id/progress", authMiddleware, (req, res) => {
@@ -404,41 +426,60 @@ export function startServer(
     });
   });
 
-  app.get("/api/extract/:id/result", authMiddleware, (req, res) => {
+  app.get("/api/extract/:id/result", authMiddleware, async (req, res) => {
     const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
+    if (job) {
+      if (job.status !== "done") {
+        res.status(202).json({ status: job.status, message: "Job still in progress" });
+        return;
+      }
+      if (!job.result || !job.result.data) {
+        res.status(500).json({ error: "Job completed but no result data" });
+        return;
+      }
+      res.json(job.result.data);
       return;
     }
 
-    if (job.status !== "done") {
-      res.status(202).json({ status: job.status, message: "Job still in progress" });
-      return;
+    // Disk / GCS fallback
+    try {
+      const outputDir = await resolveOutputDir(jobManager, req.params.id);
+      if (!outputDir) {
+        res.status(404).json({ error: "Job not found" });
+        return;
+      }
+      const extractionPath = path.join(outputDir, "extraction.json");
+      if (!fs.existsSync(extractionPath)) {
+        // Try reading directly from GCS without full download
+        const raw = await readFileFromGCS(req.params.id, "extraction.json").catch(() => null);
+        if (!raw) {
+          res.status(404).json({ error: "Job result not found" });
+          return;
+        }
+        res.json(JSON.parse(raw));
+        return;
+      }
+      res.json(JSON.parse(fs.readFileSync(extractionPath, "utf-8")));
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
     }
-
-    if (!job.result || !job.result.data) {
-      res.status(500).json({ error: "Job completed but no result data" });
-      return;
-    }
-
-    res.json(job.result.data);
   });
 
   app.get("/api/extract/:id/download", authMiddleware, async (req, res) => {
     const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-
-    if (job.status !== "done") {
+    if (job && job.status !== "done") {
       res.status(202).json({ status: job.status, message: "Job still in progress" });
       return;
     }
 
     try {
-      const archiveName = `uiharvest-${job.id}`;
-      await streamTarGz(job.outputDir, archiveName, res);
+      const outputDir = await resolveOutputDir(jobManager, req.params.id);
+      if (!outputDir) {
+        res.status(404).json({ error: "Job not found" });
+        return;
+      }
+      const archiveName = `uiharvest-${req.params.id}`;
+      await streamTarGz(outputDir, archiveName, res);
     } catch (err) {
       if (!res.headersSent) {
         res.status(500).json({ error: "Failed to create archive" });
@@ -446,211 +487,103 @@ export function startServer(
     }
   });
 
-  app.get("/api/extract/:id/memory", authMiddleware, (req, res) => {
-    const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-
-    res.json(buildMemoryIndex(job.outputDir));
-  });
-
-  app.get("/api/extract/:id/memory/content", authMiddleware, (req, res) => {
-    const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-
-    const requestedPath = String(req.query.path ?? "");
-    const filePath = resolveMemoryFile(job.outputDir, requestedPath);
-    if (!filePath) {
-      res.status(404).json({ message: "Memory document not found" });
-      return;
-    }
-
-    res.json({
-      path: requestedPath,
-      content: fs.readFileSync(filePath, "utf-8"),
-    });
-  });
-
-  // Serve job static output (screenshots, assets, fonts)
-  app.use("/api/extract/:id/output", authMiddleware, (req, res, next) => {
-    const job = jobManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-
-    express.static(job.outputDir)(req, res, next);
-  });
-
-  // ── Remix API (protected) ─────────────────────────────────────────────
-
-  app.post("/api/remix", authMiddleware, (req, res) => {
-    const { referenceUrl, targetUrl, brandOverrides, prompt } = req.body;
-
-    if (!referenceUrl && !prompt) {
-      res.status(400).json({ error: "referenceUrl or prompt is required" });
-      return;
-    }
-
-    if (referenceUrl) {
-      try {
-        new URL(referenceUrl);
-        if (targetUrl) new URL(targetUrl);
-      } catch {
-        res.status(400).json({ error: "Invalid URL" });
-        return;
-      }
-    }
-
-    const job = remixManager.create({ referenceUrl, targetUrl, brandOverrides, initialPrompt: prompt });
-    res.json({ jobId: job.id, status: job.status, phase: job.phase });
-  });
-
-  app.get("/api/remix/:id/progress", authMiddleware, async (req, res) => {
+  app.get("/api/extract/:id/memory", authMiddleware, async (req, res) => {
     try {
-      // Try memory first, then Firestore (cold-start recovery)
-      let job = remixManager.get(req.params.id);
-      if (!job) {
-        job = await remixManager.getOrHydrate(req.params.id);
-      }
-      if (!job) {
-        res.status(404).json({ error: "Remix job not found" });
-        return;
-      }
-
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders();
-
-      // Reconnect strategy: if client passes a header or query string, we skip past events.
-      const skipPast = req.query.recover === "true" || job.status === "done";
-
-      // Stop keep-alive automatically if the job is already done to save resources
-      let keepAlive: NodeJS.Timeout | null = null;
-      if (job.status !== "done") {
-        keepAlive = setInterval(() => {
-          res.write(": keep-alive\n\n");
-        }, 15_000);
-      }
-
-      const listener = (event: RemixProgressEvent) => {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-        // If the job reaches a final phase, close the keep-alive so Cloud Run can scale down
-        if (event.phase === "ready" || event.phase === "error") {
-          if (keepAlive) clearInterval(keepAlive);
-        }
-      };
-
-      const unsubscribe = remixManager.subscribe(job.id, listener, skipPast);
-
-      req.on("close", () => {
-        if (keepAlive) clearInterval(keepAlive);
-        if (unsubscribe) unsubscribe();
-      });
-    } catch (err) {
-      console.error("[server] /progress error:", (err as Error).message);
-      if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  app.get("/api/remix/:id/files", authMiddleware, async (req, res) => {
-    try {
-      // Try memory first, then Firestore (cold-start recovery)
-      let job = remixManager.get(req.params.id);
-      if (!job) {
-        job = await remixManager.getOrHydrate(req.params.id);
-      }
-      if (!job) {
-        res.status(404).json({ error: "Remix job not found" });
-        return;
-      }
-
-      if (job.status !== "done" && job.phase !== "ready") {
-        res.status(202).json({ status: job.status, phase: job.phase, message: "Still generating" });
-        return;
-      }
-
-      res.json({ files: job.files, spec: job.result?.spec });
-    } catch (err) {
-      console.error("[server] /files error:", (err as Error).message);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  app.post("/api/remix/:id/files", authMiddleware, async (req, res) => {
-    try {
-      const { path, content } = req.body;
-      if (!path || typeof content !== "string") {
-        res.status(400).json({ error: "path and content are required" });
-        return;
-      }
-
-      // Hydrate before updating in case of cold start
-      let job = remixManager.get(req.params.id);
-      if (!job) {
-        job = await remixManager.getOrHydrate(req.params.id);
-      }
-      if (!job) {
+      const outputDir = await resolveOutputDir(jobManager, req.params.id);
+      if (!outputDir) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
+      res.json(buildMemoryIndex(outputDir));
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
 
-      // This updates the file in memory and persists to Firestore.
-      // Handles manual edits from the Monaco editor in the frontend.
-      const success = await remixManager.updateFile(req.params.id, path, content);
-      if (!success) {
-        res.status(500).json({ error: "Failed to update file" });
-        return;
+  app.get("/api/extract/:id/memory/content", authMiddleware, async (req, res) => {
+    const requestedPath = String(req.query.path ?? "");
+    if (!requestedPath) {
+      res.status(400).json({ message: "path query param required" });
+      return;
+    }
+
+    try {
+      const outputDir = await resolveOutputDir(jobManager, req.params.id);
+      if (outputDir) {
+        const filePath = resolveMemoryFile(outputDir, requestedPath);
+        if (filePath) {
+          res.json({ path: requestedPath, content: fs.readFileSync(filePath, "utf-8") });
+          return;
+        }
       }
 
-      res.json({ success: true });
+      // Fallback: read directly from GCS
+      const gcsRelPath = `design-memory/${requestedPath}`;
+      const content = await readFileFromGCS(req.params.id, gcsRelPath).catch(() => null);
+      if (!content) {
+        res.status(404).json({ message: "Memory document not found" });
+        return;
+      }
+      res.json({ path: requestedPath, content });
     } catch (err) {
-      console.error("[server] POST /files error:", (err as Error).message);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 
-  app.post("/api/remix/:id/iterate", authMiddleware, async (req, res) => {
-    const { prompt, images } = req.body;
-    if (!prompt || typeof prompt !== "string") {
-      res.status(400).json({ error: "prompt is required" });
+  // Serve job static output (screenshots, assets, fonts)
+  app.use("/api/extract/:id/output", authMiddleware, async (req, res, next) => {
+    const outputDir = getOutputDirForJob(jobManager, req.params.id);
+    if (outputDir) {
+      express.static(outputDir)(req, res, next);
       return;
     }
 
-    // images is optional: array of { data: base64string, mimeType: string }
-    const imageAttachments = Array.isArray(images) ? images.slice(0, 5) : undefined;
-
-    const files = await remixManager.iterate(req.params.id, prompt, imageAttachments);
-    if (!files) {
-      res.status(404).json({ error: "Job not found or not ready" });
+    // Fallback: stream from GCS
+    // req.path starts with "/" — strip leading slash for GCS relPath
+    const relPath = req.path.replace(/^\//, "");
+    if (!relPath) {
+      res.status(404).end();
       return;
     }
 
-    res.json({ files });
+    try {
+      const served = await streamFileToResponse(req.params.id, relPath, res);
+      if (!served) res.status(404).end();
+    } catch {
+      res.status(500).end();
+    }
   });
 
-  app.get("/api/remix/:id/status", authMiddleware, (req, res) => {
-    const job = remixManager.get(req.params.id);
-    if (!job) {
-      res.status(404).json({ error: "Remix job not found" });
-      return;
+  // ── Delete job ────────────────────────────────────────────────────
+
+  app.delete("/api/extract/:id", authMiddleware, async (req, res) => {
+    const jobId = req.params.id;
+
+    // Remove from in-memory store
+    const job = jobManager.get(jobId);
+    if (job) {
+      try {
+        if (fs.existsSync(job.outputDir)) {
+          fs.rmSync(job.outputDir, { recursive: true, force: true });
+        }
+      } catch { }
     }
 
-    res.json({
-      id: job.id,
-      status: job.status,
-      phase: job.phase,
-      referenceUrl: job.referenceUrl,
-      targetUrl: job.targetUrl,
-      fileCount: job.files.length,
-    });
+    // Remove from disk fallback
+    const fallbackDir = path.join(os.tmpdir(), `uiharvest-job-${jobId}`);
+    try {
+      if (fs.existsSync(fallbackDir)) {
+        fs.rmSync(fallbackDir, { recursive: true, force: true });
+      }
+    } catch { }
+
+    // Remove from Firestore + GCS (parallel, best-effort)
+    await Promise.allSettled([
+      deleteJobRecord(jobId),
+      deleteJobFromGCS(jobId),
+    ]);
+
+    res.json({ success: true });
   });
 
   // ── Legacy CLI endpoints (backward-compat) ──────────────────────────

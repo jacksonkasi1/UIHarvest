@@ -1,53 +1,49 @@
-# ── Stage 1: Generate WebContainer base snapshot ─────────────
-FROM oven/bun:1 AS snapshot-builder
-WORKDIR /app
-
-# Need Node.js + npm for the snapshot builder
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-COPY package.json bun.lock* ../../bun.lock* ./
-RUN bun install --frozen-lockfile
-
-COPY scripts/ ./scripts/
-RUN bun run scripts/generate-base-snapshot.ts
-
-# ── Stage 2: Build scraper web frontend ──────────────────────
+# ── Stage 1: Build scraper web frontend ──────────────────────
 FROM oven/bun:1 AS web-build
 WORKDIR /app/web
-ARG CACHEBUST=1
-COPY web/package.json web/bun.lock* ./
-RUN bun install --frozen-lockfile
-COPY web/ ./
-COPY --from=snapshot-builder /app/web/public/base-snapshot.bin ./public/base-snapshot.bin
-COPY --from=snapshot-builder /app/web/public/snapshot-version.json ./public/snapshot-version.json
+
+COPY apps/scraper/web/package.json ./
+RUN bun install
+
+COPY apps/scraper/web/ ./
 RUN bun run build
 
-# ── Stage 3: Runtime ─────────────────────────────────────────
-FROM oven/bun:1
+# ── Stage 2: Runtime ─────────────────────────────────────────
+FROM mcr.microsoft.com/playwright:v1.58.2-jammy
 
-# Install Playwright Chromium dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    wget gnupg ca-certificates fonts-liberation \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
-    libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 \
-    libnss3 libxcomposite1 libxdamage1 libxfixes3 \
-    libxrandr2 libxss1 xdg-utils && \
+    apt-get install -y --no-install-recommends curl unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -sf /root/.bun/bin/bun /usr/local/bin/bun && \
+    ln -sf /root/.bun/bin/bunx /usr/local/bin/bunx
+
 WORKDIR /app
 
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
+# Copy all workspace package.json files (required for bun workspace resolution)
+COPY package.json bun.lock ./
+COPY packages/auth/package.json    ./packages/auth/package.json
+COPY packages/db/package.json      ./packages/db/package.json
+COPY packages/types/package.json   ./packages/types/package.json
+COPY packages/ui/package.json      ./packages/ui/package.json
+COPY apps/scraper/package.json     ./apps/scraper/package.json
+COPY apps/server/package.json      ./apps/server/package.json
+COPY apps/web/package.json         ./apps/web/package.json
+COPY apps/scraper/web/package.json ./apps/scraper/web/package.json
 
-RUN bunx playwright install chromium
+RUN bun install --production
 
-COPY src/ ./src/
-COPY .env* ./
+# Copy workspace package sources
+COPY packages/auth/  ./packages/auth/
+COPY packages/db/    ./packages/db/
+COPY packages/types/ ./packages/types/
 
-COPY --from=web-build /app/web/dist ./web/dist
+COPY apps/scraper/src/   ./apps/scraper/src/
+COPY apps/scraper/.env*  ./apps/scraper/
+
+COPY --from=web-build /app/web/dist ./apps/scraper/web/dist
 
 ENV PORT=8080
 ENV NODE_ENV=production
@@ -56,4 +52,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8080/api/auth/status || exit 1
 
-CMD ["bun", "run", "src/serve.ts"]
+CMD ["bun", "run", "apps/scraper/src/serve.ts"]
