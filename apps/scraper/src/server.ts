@@ -15,6 +15,7 @@ import {
   listJobRecords,
   getJobRecord,
   deleteJobRecord,
+  updateJobStatus,
 } from "./firestore-store.js";
 import {
   readFileFromGCS,
@@ -363,7 +364,7 @@ export function startServer(
 
     // Disk fallback
     const fallbackDir = path.join(os.tmpdir(), `uiharvest-job-${req.params.id}`);
-    if (fs.existsSync(fallbackDir) && fs.existsSync(path.join(fallbackDir, "extraction.json"))) {
+    if (fs.existsSync(fallbackDir) && (fs.existsSync(path.join(fallbackDir, "design-system.json")) || fs.existsSync(path.join(fallbackDir, "extraction.json")))) {
       res.json({ id: req.params.id, status: "done", lastEvent: { phase: "done", message: "Recovered from disk" } });
       return;
     }
@@ -372,6 +373,13 @@ export function startServer(
     try {
       const record = await getJobRecord(req.params.id);
       if (record) {
+        // If Firestore says "running" but job is not in memory, the instance
+        // was killed (scale-to-zero). Mark it as error so UI doesn't spin forever.
+        if (record.status === "running") {
+          await updateJobStatus(req.params.id, "error").catch(() => {});
+          res.json({ id: record.id, url: record.url, status: "error", lastEvent: { phase: "error", message: "Job was interrupted (instance restarted)" } });
+          return;
+        }
         res.json({ id: record.id, url: record.url, status: record.status, lastEvent: { phase: record.status, message: `Recovered from Firestore: ${record.status}` } });
         return;
       }
@@ -448,10 +456,15 @@ export function startServer(
         res.status(404).json({ error: "Job not found" });
         return;
       }
-      const extractionPath = path.join(outputDir, "extraction.json");
-      if (!fs.existsSync(extractionPath)) {
+      // Extractor writes design-system.json; older versions wrote extraction.json
+      const dsPath = path.join(outputDir, "design-system.json");
+      const legacyPath = path.join(outputDir, "extraction.json");
+      const localPath = fs.existsSync(dsPath) ? dsPath : fs.existsSync(legacyPath) ? legacyPath : null;
+      if (!localPath) {
         // Try reading directly from GCS without full download
-        const raw = await readFileFromGCS(req.params.id, "extraction.json").catch(() => null);
+        const raw =
+          (await readFileFromGCS(req.params.id, "design-system.json").catch(() => null)) ??
+          (await readFileFromGCS(req.params.id, "extraction.json").catch(() => null));
         if (!raw) {
           res.status(404).json({ error: "Job result not found" });
           return;
@@ -459,7 +472,7 @@ export function startServer(
         res.json(JSON.parse(raw));
         return;
       }
-      res.json(JSON.parse(fs.readFileSync(extractionPath, "utf-8")));
+      res.json(JSON.parse(fs.readFileSync(localPath, "utf-8")));
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

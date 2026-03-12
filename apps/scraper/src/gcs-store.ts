@@ -195,13 +195,16 @@ export async function deleteJobFromGCS(jobId: string): Promise<void> {
 }
 
 /**
- * Check if a job's extraction.json exists in GCS.
+ * Check if a job's result file exists in GCS.
+ * Supports both design-system.json (current) and extraction.json (legacy).
  */
 export async function jobExistsInGCS(jobId: string): Promise<boolean> {
   await ensureBucket();
   const bucket = getBucket();
-  const [exists] = await bucket.file(`jobs/${jobId}/extraction.json`).exists();
-  return exists;
+  const [ds] = await bucket.file(`jobs/${jobId}/design-system.json`).exists();
+  if (ds) return true;
+  const [legacy] = await bucket.file(`jobs/${jobId}/extraction.json`).exists();
+  return legacy;
 }
 
 /**
