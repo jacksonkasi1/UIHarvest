@@ -217,10 +217,16 @@ interface ProgressViewProps {
 }
 
 export function ProgressView({ jobId, onViewExplorer, onBack }: ProgressViewProps) {
-    const [events, setEvents] = useState<ProgressEvent[]>([])
-    const [currentPhase, setCurrentPhase] = useState<string>("init")
-    const [progress, setProgress] = useState(0)
-    const [isDone, setIsDone] = useState(false)
+    // If handleOpenJob already confirmed this job is done, start in done state
+    // to skip the SSE connection entirely.
+    const alreadyDone = localStorage.getItem(`uih_done_${jobId}`) === "1"
+
+    const [events, setEvents] = useState<ProgressEvent[]>(() =>
+        alreadyDone ? [{ phase: "done", message: "Extraction complete", progress: 100 }] : []
+    )
+    const [currentPhase, setCurrentPhase] = useState<string>(alreadyDone ? "done" : "init")
+    const [progress, setProgress] = useState(alreadyDone ? 100 : 0)
+    const [isDone, setIsDone] = useState(alreadyDone)
     const [hasError, setHasError] = useState(false)
     const [downloading, setDownloading] = useState(false)
 
@@ -236,8 +242,10 @@ export function ProgressView({ jobId, onViewExplorer, onBack }: ProgressViewProp
         logEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [events])
 
-    // Connect SSE
+    // Connect SSE — skip entirely if job is already known to be done
     useEffect(() => {
+        if (alreadyDone) return
+
         const connect = () => {
             const es = new EventSource(`/api/extract/${jobId}/progress`)
             eventSourceRef.current = es
@@ -301,7 +309,7 @@ export function ProgressView({ jobId, onViewExplorer, onBack }: ProgressViewProp
         return () => {
             eventSourceRef.current?.close()
         }
-    }, [jobId])
+    }, [jobId, alreadyDone])
 
     // ── Called when user clicks "View Explorer" ──────────────────────────
     const handleViewExplorer = () => {
@@ -367,6 +375,7 @@ export function ProgressView({ jobId, onViewExplorer, onBack }: ProgressViewProp
 
     const handleBack = () => {
         localStorage.removeItem("uih_jobId")
+        localStorage.removeItem(`uih_done_${jobId}`)
         onBack()
     }
 

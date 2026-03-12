@@ -52,7 +52,7 @@ export function LandingView({ onPagesDiscovered, existingJobId, onResumeJob, onO
 
     // Load past jobs from Firestore via /api/jobs
     const loadJobs = useCallback(() => {
-        fetch("/api/jobs")
+        fetch("/api/jobs", { credentials: "include" })
             .then((res) => (res.ok ? res.json() : { jobs: [] }))
             .then(({ jobs }) => setPastJobs(jobs as PastJob[]))
             .catch(() => setPastJobs([]))
@@ -114,7 +114,7 @@ export function LandingView({ onPagesDiscovered, existingJobId, onResumeJob, onO
         e.stopPropagation()
         setDeletingId(jobId)
         try {
-            await fetch(`/api/extract/${jobId}`, { method: "DELETE" })
+            await fetch(`/api/extract/${jobId}`, { method: "DELETE", credentials: "include" })
             setPastJobs((prev) => prev.filter((j) => j.id !== jobId))
         } catch {
             // ignore

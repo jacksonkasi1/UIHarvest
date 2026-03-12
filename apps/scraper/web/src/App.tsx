@@ -145,7 +145,7 @@ export default function App() {
     const savedJobId = localStorage.getItem("uih_jobId")
     if (savedJobId) {
       // Verify job is still alive
-      fetch(`/api/extract/${savedJobId}/status`)
+      fetch(`/api/extract/${savedJobId}/status`, { credentials: "include" })
         .then((res) => {
           if (res.ok) return res.json()
           throw new Error("Job not found")
