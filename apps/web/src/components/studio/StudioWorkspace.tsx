@@ -86,16 +86,16 @@ export function StudioWorkspace({
             )}
 
             {rightPanel === "terminal" && (
-                <div className="flex-1 overflow-auto bg-[#1e1e1e] p-5 font-mono text-[13px] leading-relaxed shadow-inner">
+                <div className="flex-1 overflow-auto bg-muted/30 p-5 font-mono text-[13px] leading-relaxed shadow-inner border-l border-border/60">
                     {containerLogs.length === 0 ? (
-                        <p className="text-gray-500 italic">Terminal output appears when WebContainer boots…</p>
+                        <p className="text-muted-foreground italic">Terminal output appears when WebContainer boots…</p>
                     ) : (
                         containerLogs.map((log, i) => {
-                            let color = "text-gray-400"
+                            let color = "text-muted-foreground"
                             if (log.includes("[error]")) color = "text-red-400"
                             else if (log.includes("[server-ready]")) color = "text-emerald-400"
                             else if (log.includes("[install]")) color = "text-blue-400"
-                            else color = "text-gray-300"
+                            else color = "text-foreground"
                             return (
                                 <div key={i} className={`font-mono ${color}`}>{log}</div>
                             )

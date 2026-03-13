@@ -15,6 +15,7 @@ export interface PersistedJobMeta {
   referenceUrl?: string
   targetUrl?: string
   initialPrompt?: string
+  projectName?: string
 }
 
 export interface PersistedJob extends PersistedJobMeta {

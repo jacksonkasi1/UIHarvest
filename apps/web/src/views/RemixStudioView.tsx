@@ -175,7 +175,7 @@ export function RemixStudioView({ projectId, onBack }: RemixStudioProps) {
                         handleStop={handleStop}
                         attachedImages={attachedImages}
                         setAttachedImages={setAttachedImages}
-                        chatInputRef={chatInputRef as any}
+                        chatInputRef={chatInputRef}
                         containerReady={containerReady}
                         isBootingContainer={isBootingContainer}
                     />

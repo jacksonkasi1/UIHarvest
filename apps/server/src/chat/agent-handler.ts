@@ -51,10 +51,10 @@ export interface AgentHandlerOptions {
  * Streams SSE events to the Express response throughout execution.
  */
 export async function handleAgentChat(options: AgentHandlerOptions): Promise<void> {
-  const { jobId, prompt, res, signal } = options
+  const { jobId, prompt, images, res, signal } = options
   const subagentToolCalls = new Set<string>()
 
-  console.log(`[agent-handler] start jobId=${jobId} promptLen=${prompt.length}`)
+  console.log(`[agent-handler] start jobId=${jobId} promptLen=${prompt.length} images=${images?.length || 0}`)
 
   // ── Load current files from Firestore ──────────────────────────────────────
   let currentFiles: StoredFile[] = []
@@ -121,9 +121,26 @@ export async function handleAgentChat(options: AgentHandlerOptions): Promise<voi
 
   try {
     // ── Stream agent execution ─────────────────────────────────────────────
+    const messagesParam: any[] = []
+    
+    if (images && images.length > 0) {
+      messagesParam.push({
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          ...images.map(img => ({
+            type: "image_url",
+            image_url: { url: `data:${img.mimeType};base64,${img.data}` }
+          }))
+        ]
+      })
+    } else {
+      messagesParam.push({ role: "user", content: prompt })
+    }
+
     const stream = await orchestrator.stream(
       {
-        messages: [{ role: "user", content: prompt }],
+        messages: messagesParam,
       },
       { streamMode: "messages", subgraphs: true }
     )

@@ -1,9 +1,12 @@
-import { useState } from "react"
 // ** import core packages
-import { ChevronDown, Globe, Palette, Code2, Terminal, RefreshCw, Monitor, ArrowUpRight, History, PanelLeft, Smartphone, Tablet, Plus, RotateCcw } from "lucide-react"
+import { useState } from "react"
+
+// ** import icons
+import { ChevronDown, Globe, Code2, Terminal, RefreshCw, Monitor, ArrowUpRight, History, PanelLeft, Smartphone, Tablet, Plus, RotateCcw } from "lucide-react"
 
 // ** import components
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import { ModeToggle } from "@/components/mode-toggle"
 
 // ** import types
 import type { RightPanel, ViewportSize } from "@/types/studio"
@@ -148,9 +151,7 @@ export function StudioHeader({
                             <Globe className="h-[15px] w-[15px]" />
                             Preview
                         </button>
-                        <button className="inline-flex items-center justify-center rounded-lg border border-border/60 bg-background hover:bg-secondary/80 w-8 h-8 text-muted-foreground hover:text-foreground shadow-sm transition-all">
-                            <Palette className="h-[15px] w-[15px]" />
-                        </button>
+                        <ModeToggle />
                         <button
                             aria-label="View Code"
                             className={`inline-flex items-center justify-center rounded-lg border transition-all w-8 h-8 ${rightPanel === "code" ? "bg-[#E0E7FF] dark:bg-blue-900/40 border-[#C7D2FE] dark:border-blue-800/50 text-[#4338CA] dark:text-blue-300" : "border-border/60 bg-background hover:bg-secondary/80 text-muted-foreground hover:text-foreground shadow-sm"}`}

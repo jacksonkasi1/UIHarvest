@@ -17,10 +17,10 @@ export function ChatMessageBubble({ msg, msgIdx, onRetry }: { msg: ChatMessage, 
 
     return (
         <div
-            className={`group flex flex-col gap-1 w-full relative z-0 ${msg.role === "user" ? "items-end" : "items-start"}`}
+            className={`group flex min-w-0 flex-col gap-1 w-full relative z-0 ${msg.role === "user" ? "items-end" : "items-start"}`}
             style={{ animationDelay: `${msgIdx * 30}ms` }}
         >
-            <div className={`w-fit max-w-[92%] px-1 ${msg.role === "user"
+            <div className={`min-w-0 w-fit max-w-[92%] overflow-hidden px-1 ${msg.role === "user"
                 ? "bg-muted/70 px-4 py-3 rounded-[1.25rem] rounded-tr-sm text-foreground text-[14px]"
                 : "text-foreground"
                 }`}>
@@ -55,11 +55,15 @@ export function ChatMessageBubble({ msg, msgIdx, onRetry }: { msg: ChatMessage, 
                 )}
                 {/* Message content */}
                 {msg.role === "assistant" && msg.content ? (
-                    <div className={msg.toolExecutions && msg.toolExecutions.length > 0 ? "mt-2" : ""}>
+                    <div className={`min-w-0 ${msg.toolExecutions && msg.toolExecutions.length > 0 ? "mt-2" : ""}`}>
                         <MarkdownContent content={msg.content} />
                     </div>
+                ) : msg.role === "assistant" && msg.status === "done" && msg.toolExecutions && msg.toolExecutions.length > 0 ? (
+                    <div className="mt-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-[13px] text-muted-foreground">
+                        Applied the requested changes. You can review each step below.
+                    </div>
                 ) : msg.content ? (
-                    <span className="text-[14px] leading-relaxed block whitespace-pre-wrap text-foreground">{msg.content}</span>
+                    <span className="text-[14px] leading-relaxed block whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-foreground">{msg.content}</span>
                 ) : null}
                 {msg.status === "streaming" && (
                     <span className="inline-block w-1.5 h-3.5 bg-muted-foreground animate-pulse ml-1 align-middle motion-reduce:animate-none" />

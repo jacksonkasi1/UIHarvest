@@ -7,6 +7,7 @@ import {
   AssistantRuntimeProvider,
   useExternalStoreRuntime,
 } from "@assistant-ui/react"
+import type { ThreadMessageLike } from "@assistant-ui/react"
 
 // ** import types
 import type { GeneratedFile, ChatMessage, ImageAttachment, ChatEvent } from "@/types/studio"
@@ -26,6 +27,43 @@ function chatDebugLog(message: string, meta?: unknown): void {
   console.debug(`[useRemixChat] ${message}`)
 }
 
+function isToolStatusNoise(line?: string): boolean {
+  if (!line) return true
+
+  const normalized = line.trim()
+  if (!normalized) return true
+
+  // Standard short loading states
+  if (/^processing\.{0,3}$/i.test(normalized)) return true
+
+  // Exact matches for typical tool logs
+  if (/^(starting|running|completed|failed)\s+[a-z_]+$/i.test(normalized)) return true
+  
+  // Specifically catch repetitive "Completed file_read Completed file_read" style lines
+  if (/^(?:completed\s+[a-z_]+\s*)+$/i.test(normalized)) return true
+
+  // Let normal conversational text pass through
+  return false
+}
+
+function appendAssistantContent(current: string, nextLine?: string): string {
+  if (!nextLine) return current
+
+  const normalizedLine = nextLine.trim()
+  if (!normalizedLine || isToolStatusNoise(normalizedLine)) return current
+
+  if (!current) return normalizedLine
+
+  const existingLines = current
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (existingLines.includes(normalizedLine)) return current
+
+  return `${current}\n${normalizedLine}`
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
@@ -42,7 +80,7 @@ export interface UseRemixChatReturn {
   setRefreshKey: Dispatch<SetStateAction<number>>
   handleSendMessage: (overridePrompt?: string, mode?: string) => void
   handleStop: () => void
-  chatInputRef: React.RefObject<HTMLInputElement | null>
+  chatInputRef: React.RefObject<HTMLTextAreaElement | null>
   /** Wrap the studio tree with the assistant runtime provider */
   RuntimeProvider: React.ComponentType<{ children: React.ReactNode }>
 }
@@ -161,6 +199,22 @@ function loadMessages(jobId: string): ChatMessage[] {
   }
 }
 
+function toRuntimeMessage(msg: ChatMessage): ThreadMessageLike {
+  return {
+    role: msg.role,
+    content: [{ type: "text", text: msg.content }],
+    id: msg.id,
+    createdAt: new Date(msg.timestamp),
+    metadata: {
+      custom: {
+        status: msg.status,
+        images: msg.images,
+        toolExecutions: msg.toolExecutions,
+      },
+    },
+  }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Hook
 // ────────────────────────────────────────────────────────────────────────────
@@ -189,7 +243,7 @@ export function useRemixChat(
   const [refreshKey, setRefreshKey] = useState(0)
 
   const abortControllerRef = useRef<AbortController | null>(null)
-  const chatInputRef = useRef<HTMLInputElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const pendingFileBatchesRef = useRef<GeneratedFile[][]>([])
 
   // ── WebContainer file application ─────────────────────────────────────────
@@ -300,9 +354,7 @@ export function useRemixChat(
                   summary: statusLine,
                 })
               }
-              const nextContent = m.content
-                ? `${m.content}\n${statusLine}`
-                : statusLine
+              const nextContent = appendAssistantContent(m.content, statusLine)
               return { ...m, content: nextContent, toolExecutions: toolExecs }
             }),
           )
@@ -365,11 +417,7 @@ export function useRemixChat(
                 }
               }
               const completionLine = event.summary ?? event.message
-              const nextContent = completionLine
-                ? m.content
-                  ? `${m.content}\n${completionLine}`
-                  : completionLine
-                : m.content
+              const nextContent = appendAssistantContent(m.content, completionLine)
               return { ...m, content: nextContent, toolExecutions: toolExecs }
             }),
           )
@@ -514,12 +562,7 @@ export function useRemixChat(
   const runtime = useExternalStoreRuntime({
     isRunning: isStreaming,
     messages,
-    convertMessage: (msg: ChatMessage) => ({
-      role: msg.role,
-      content: [{ type: "text" as const, text: msg.content }],
-      id: msg.id,
-      createdAt: new Date(msg.timestamp),
-    }),
+    convertMessage: toRuntimeMessage,
     onNew: async (appendMsg) => {
       const textPart = appendMsg.content.find((p) => p.type === "text")
       const prompt = textPart && textPart.type === "text" ? textPart.text : ""

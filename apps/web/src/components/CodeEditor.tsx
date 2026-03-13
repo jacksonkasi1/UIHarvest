@@ -1,6 +1,7 @@
 // ** import core packages
 import { useEffect, useMemo, useState } from "react"
 import Editor from "@monaco-editor/react"
+import { useTheme } from "next-themes"
 
 // ** import icons
 import {
@@ -55,10 +56,10 @@ function getFileIcon(path: string) {
     const ext = path.split(".").pop()?.toLowerCase() ?? ""
     if (ext === "json") return <FileJson className="h-3.5 w-3.5 text-yellow-500" />
     if (ext === "css") return <FileType className="h-3.5 w-3.5 text-blue-400" />
-    if (ext === "md" || ext === "txt") return <FileText className="h-3.5 w-3.5 text-white/40" />
+    if (ext === "md" || ext === "txt") return <FileText className="h-3.5 w-3.5 text-muted-foreground" />
     if (ext === "tsx" || ext === "jsx") return <FileCode className="h-3.5 w-3.5 text-blue-400" />
     if (ext === "ts" || ext === "js") return <FileCode className="h-3.5 w-3.5 text-yellow-400" />
-    return <FileCode className="h-3.5 w-3.5 text-white/40" />
+    return <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
 }
 
 function buildTree(files: GeneratedFile[]): TreeNode[] {
@@ -138,7 +139,7 @@ function TreeNodeView({
     return (
         <>
             <button
-                className={`flex w-full items-center gap-1 px-2 py-0.5 text-[11px] hover:bg-white/5 transition-colors ${isSelected ? "bg-white/10 text-white" : "text-white/60"
+                className={`flex w-full items-center gap-1 px-2 py-0.5 text-[11px] hover:bg-accent/60 transition-colors ${isSelected ? "bg-accent text-foreground" : "text-muted-foreground"
                     }`}
                 style={{ paddingLeft: `${depth * 12 + 8}px` }}
                 onClick={() => {
@@ -152,9 +153,9 @@ function TreeNodeView({
                 {node.isDir ? (
                     <>
                         {isExpanded ? (
-                            <ChevronDown className="h-3 w-3 shrink-0 text-white/30" />
+                            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" />
                         ) : (
-                            <ChevronRight className="h-3 w-3 shrink-0 text-white/30" />
+                            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/70" />
                         )}
                         {isExpanded ? (
                             <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" />
@@ -195,6 +196,7 @@ function TreeNodeView({
 
 export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: CodeEditorProps) {
     const [copied, setCopied] = useState(false)
+    const { theme, resolvedTheme } = useTheme()
     const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
         // Auto-expand all directories
         const dirs = new Set<string>()
@@ -210,6 +212,7 @@ export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: 
     const tree = useMemo(() => buildTree(files), [files])
     const selectedContent = files.find((f) => f.path === selectedFile)?.content ?? ""
     const language = selectedFile ? getLanguage(selectedFile) : "typescript"
+    const editorTheme = theme === "system" ? (resolvedTheme === "dark" ? "vs-dark" : "vs") : theme === "dark" ? "vs-dark" : "vs"
 
     // Update expanded dirs when files change
     useEffect(() => {
@@ -247,17 +250,17 @@ export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: 
 
     if (files.length === 0) {
         return (
-            <div className="flex h-full items-center justify-center bg-[#1d1f21] text-white/30 text-sm">
+            <div className="flex h-full items-center justify-center bg-background text-muted-foreground text-sm">
                 Code will appear here once generation is complete…
             </div>
         )
     }
 
     return (
-        <div className="flex h-full overflow-hidden bg-[#1d1f21]">
+        <div className="flex h-full overflow-hidden bg-background">
             {/* File tree sidebar */}
-            <div className="w-48 shrink-0 border-r border-white/5 overflow-y-auto py-1.5 scrollbar-none">
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/20">
+            <div className="w-48 shrink-0 border-r border-border/60 overflow-y-auto py-1.5 scrollbar-none bg-muted/20">
+                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Files
                 </div>
                 {tree.map((node) => (
@@ -277,13 +280,13 @@ export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: 
             <div className="flex-1 overflow-auto relative">
                 {/* File name header + copy */}
                 {selectedFile && (
-                    <div className="sticky top-0 z-10 flex items-center justify-between bg-[#1d1f21]/90 backdrop-blur border-b border-white/5 px-4 py-1.5">
-                        <div className="flex items-center gap-1.5 text-xs text-white/50">
+                    <div className="sticky top-0 z-10 flex items-center justify-between bg-background/95 backdrop-blur border-b border-border/60 px-4 py-1.5">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             {getFileIcon(selectedFile)}
                             <span>{selectedFile}</span>
                         </div>
                         <button
-                            className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-white/40 hover:bg-white/5 hover:text-white/70 transition-colors"
+                            className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                             onClick={handleCopy}
                         >
                             {copied ? (
@@ -301,7 +304,7 @@ export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: 
                         <Editor
                             height="100%"
                             language={language === 'tsx' || language === 'jsx' ? 'typescript' : language}
-                            theme="vs-dark"
+                            theme={editorTheme}
                             value={selectedContent}
                             onChange={(val) => {
                                 if (val !== undefined && onFileChange) {
@@ -339,7 +342,7 @@ export function CodeEditor({ files, selectedFile, onSelectFile, onFileChange }: 
                             }}
                         />
                     ) : (
-                        <div className="flex h-full items-center justify-center text-white/20 text-sm">
+                        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
                             Select a file to view
                         </div>
                     )}

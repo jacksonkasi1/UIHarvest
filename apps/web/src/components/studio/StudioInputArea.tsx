@@ -1,5 +1,10 @@
-import { useState } from "react"
+// ** import core packages
+import { useCallback, useEffect, useState } from "react"
+
+// ** import icons
 import { MessageSquare, ArrowUp, X, Paperclip, Square, Zap, Lightbulb } from "lucide-react"
+
+// ** import components
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -8,7 +13,11 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
+// ** import types
 import type { ImageAttachment } from "@/types/studio"
+
+const MAX_TEXTAREA_HEIGHT = 220
 
 interface StudioInputAreaProps {
     chatInput: string
@@ -47,10 +56,34 @@ export function StudioInputArea({
 }: StudioInputAreaProps) {
     const [isDraggingOver, setIsDraggingOver] = useState(false)
 
+    const resizeTextarea = useCallback(() => {
+        const textarea = chatInputRef.current
+        if (!textarea) return
+
+        textarea.style.height = "auto"
+        const nextHeight = Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)
+        textarea.style.height = `${nextHeight}px`
+        textarea.style.overflowY = textarea.scrollHeight > MAX_TEXTAREA_HEIGHT ? "auto" : "hidden"
+    }, [chatInputRef])
+
+    useEffect(() => {
+        resizeTextarea()
+    }, [chatInput, resizeTextarea])
+
+    const submitMessage = useCallback(() => {
+        if (!isReady || isStreaming || !chatInput.trim()) return
+
+        handleSendMessage(undefined, selectedMode)
+
+        requestAnimationFrame(() => {
+            resizeTextarea()
+        })
+    }, [chatInput, handleSendMessage, isReady, isStreaming, resizeTextarea, selectedMode])
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            handleSendMessage(undefined, selectedMode)
+            submitMessage()
         }
     }
 
@@ -90,7 +123,7 @@ export function StudioInputArea({
                 }}
             />
 
-            <div className={`bg-white rounded-[1.5rem] p-1.5 shadow-sm focus-within:shadow-md transition-shadow relative ${isDraggingOver ? 'border-primary/50 border ring-4 ring-primary/10' : 'border border-border/60'}`}>
+            <div className={`bg-background rounded-[1.5rem] p-1.5 shadow-sm focus-within:shadow-md transition-shadow relative max-h-[55vh] overflow-hidden ${isDraggingOver ? 'border-primary/50 border ring-4 ring-primary/10' : 'border border-border/60'}`}>
                 {isDraggingOver && (
                     <div className="absolute inset-0 z-10 bg-background/80 backdrop-blur-sm rounded-[1.5rem] flex items-center justify-center border-2 border-dashed border-primary/50 text-primary font-medium pointer-events-none">
                         Drop images here to attach...
@@ -119,7 +152,7 @@ export function StudioInputArea({
                         aria-label="Chat input"
                         name="chat"
                         autoComplete="off"
-                        className="w-full min-h-[44px] max-h-[200px] resize-none bg-transparent border-0 text-[14px] py-3 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full min-h-[44px] max-h-[220px] resize-none overflow-y-auto bg-transparent border-0 text-[14px] py-3 px-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
                         placeholder={isReady ? "Ask UI Harvest to modify…" : "Waiting…"}
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
@@ -127,13 +160,7 @@ export function StudioInputArea({
                         onPaste={handlePaste}
                         disabled={!isReady || isStreaming}
                         rows={1}
-                        onInput={(e) => {
-                            const target = e.target as HTMLTextAreaElement;
-                            if (target.scrollHeight !== target.clientHeight) {
-                                target.style.height = 'auto';
-                                target.style.height = `${target.scrollHeight}px`;
-                            }
-                        }}
+                        onInput={resizeTextarea}
                     />
 
                     <div className="flex items-center justify-between px-2 py-1.5">
@@ -183,7 +210,7 @@ export function StudioInputArea({
                                     variant="default"
                                     className="h-8 w-8 rounded-full transition-colors disabled:opacity-20"
                                     disabled={!isReady || !chatInput?.trim()}
-                                    onClick={() => handleSendMessage(undefined, selectedMode)}
+                                    onClick={submitMessage}
                                 >
                                     <ArrowUp aria-hidden="true" className="w-4 h-4" />
                                 </Button>
