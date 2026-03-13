@@ -11,9 +11,24 @@ export const serverConfig = {
   studioWebOrigin: process.env.STUDIO_WEB_ORIGIN || "http://localhost:5174",
 }
 
+const resolvedGoogleApiKey =
+  process.env.GOOGLE_CLOUD_API_KEY || process.env.GOOGLE_API_KEY || ""
+
+// LangChain google-genai provider reads GOOGLE_API_KEY from process.env.
+// Always normalize to the resolved key so external shell env values cannot
+// accidentally inject an unsupported token type.
+if (resolvedGoogleApiKey) {
+  process.env.GOOGLE_API_KEY = resolvedGoogleApiKey
+}
+
 export const aiConfig = {
-  googleApiKey: process.env.GOOGLE_CLOUD_API_KEY || "",
-  model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  googleApiKey: resolvedGoogleApiKey,
+  provider: process.env.AI_PROVIDER || "google-genai",
+  model:
+    process.env.AI_MODEL ||
+    process.env.GEMINI_MODEL_CODEGEN ||
+    process.env.GEMINI_MODEL_ANALYSIS ||
+    "gemini-3.1-pro-preview",
 }
 
 export const morphConfig = {

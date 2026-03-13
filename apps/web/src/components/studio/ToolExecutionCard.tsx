@@ -1,6 +1,29 @@
 import { useState } from "react"
-import { Loader2, CheckCircle, AlertCircle, FileCode, ChevronDown, ChevronRight } from "lucide-react"
+import { Loader2, CheckCircle, AlertCircle, FileCode, ChevronDown, ChevronRight, Hammer, Bug, ListChecks, Terminal, Book, Zap } from "lucide-react"
 import type { ToolExecution } from "@/types/studio"
+
+function getToolIcon(toolName: string) {
+    if (toolName === "code_editor" || toolName === "code_edit" || toolName.startsWith("file_")) {
+        return <FileCode className="h-4 w-4 text-blue-500/80 shrink-0" />
+    }
+    if (toolName === "scaffolder") {
+        return <Hammer className="h-4 w-4 text-orange-500/80 shrink-0" />
+    }
+    if (toolName === "debugger") {
+        return <Bug className="h-4 w-4 text-red-500/80 shrink-0" />
+    }
+    if (toolName === "planner") {
+        return <ListChecks className="h-4 w-4 text-purple-500/80 shrink-0" />
+    }
+    if (toolName === "run_command") {
+        return <Terminal className="h-4 w-4 text-zinc-500/80 shrink-0" />
+    }
+    if (toolName.includes("skill")) {
+        return <Book className="h-4 w-4 text-emerald-500/80 shrink-0" />
+    }
+    // Default for MCP and others
+    return <Zap className="h-4 w-4 text-yellow-500/80 shrink-0" />
+}
 
 export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
     const [expanded, setExpanded] = useState(false)
@@ -19,11 +42,11 @@ export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
                 ) : (
                     <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                 )}
-                <FileCode className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+                {getToolIcon(exec.tool)}
                 <span className="flex-1 text-foreground font-medium truncate tracking-tight text-[14px]">
                     {exec.message}
                 </span>
-                {exec.filesChanged !== undefined && (
+                {exec.filesChanged !== undefined && exec.filesChanged > 0 && (
                     <span className="text-[12px] text-muted-foreground font-mono shrink-0 px-2 py-0.5 bg-muted rounded-md mr-1">
                         {exec.filesChanged} file{exec.filesChanged !== 1 ? "s" : ""}
                     </span>

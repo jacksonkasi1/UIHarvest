@@ -5,13 +5,9 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? ""
 
 export const apiRoutes = {
-  // Scraper-originated job routes (bootstrap progress + initial files)
-  remixFiles: (jobId: string) => `${API_BASE}/api/remix/${jobId}/files`,
-  remixProgress: (jobId: string) => `${API_BASE}/api/remix/${jobId}/progress`,
-
   // Studio chat (apps/server)
-  chat: (jobId: string) => `${API_BASE}/api/chat/${jobId}`,
-  chatFiles: (jobId: string) => `${API_BASE}/api/chat/${jobId}/files`,
+  chat: (projectId: string) => `${API_BASE}/api/chat/${projectId}`,
+  chatFiles: (projectId: string) => `${API_BASE}/api/chat/${projectId}/files`,
 
   // Standalone vibe-coding project routes
   projects: () => `${API_BASE}/api/projects`,

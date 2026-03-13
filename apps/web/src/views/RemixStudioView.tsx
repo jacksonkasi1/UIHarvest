@@ -3,7 +3,6 @@ import { useState, useRef } from "react"
 import { X } from "lucide-react"
 
 // ** import hooks
-import { useWebContainer } from "@/hooks/studio/useWebContainer"
 import { useProjectContainer } from "@/hooks/studio/useProjectContainer"
 import { useRemixChat } from "@/hooks/studio/useRemixChat"
 
@@ -15,21 +14,18 @@ import { StudioWorkspace } from "@/components/studio/StudioWorkspace"
 // ** import types
 import type { RightPanel, ViewportSize, GeneratedFile } from "@/types/studio"
 
-// ── One of jobId or projectId must be provided ───────────────────────────────
+interface RemixStudioProps {
+    projectId: string
+    onBack: () => void
+}
 
-type RemixStudioProps =
-  | { jobId: string; projectId?: never; onBack: () => void }
-  | { projectId: string; jobId?: never; onBack: () => void }
-
-export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) {
+export function RemixStudioView({ projectId, onBack }: RemixStudioProps) {
     const [selectedFile, setSelectedFile] = useState<string | null>(null)
     const [rightPanel, setRightPanel] = useState<RightPanel>("preview")
     const [viewportSize, setViewportSize] = useState<ViewportSize>("desktop")
     const [isChatExpanded, setIsChatExpanded] = useState(true)
 
-    // The ID used as the key for Firestore + chat — same shape for both flows
-    const studioId = (jobId ?? projectId) as string
-    const isProjectMode = !!projectId
+    const studioId = projectId
 
     // State
     const [files, setFiles] = useState<GeneratedFile[]>([])
@@ -37,18 +33,8 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
     // Shared terminal log state — fed by both container hook and useRemixChat
     const [containerLogs, setContainerLogs] = useState<string[]>([])
 
-    // ── Container hook — pick based on mode ─────────────────────────────────
-    const jobContainerResult = useWebContainer(
-        isProjectMode ? "__noop__" : studioId,
-        setFiles,
-        setSelectedFile,
-        setContainerReady,
-        containerReady,
-        setContainerLogs,
-    )
-
     const projectContainerResult = useProjectContainer(
-        isProjectMode ? studioId : "__noop__",
+        studioId,
         setFiles,
         setSelectedFile,
         setContainerReady,
@@ -65,10 +51,9 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
         statusMessage,
         projectName,
         setProjectName,
-        hardReloadKey,
         setHardReloadKey,
         handleHardReset,
-    } = isProjectMode ? projectContainerResult : jobContainerResult
+    } = projectContainerResult
 
     const {
         messages,
@@ -91,22 +76,20 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
 
     const handleRefreshPreview = () => {
         setRefreshKey(prev => prev + 1)
-        setHardReloadKey?.(prev => prev + 1)
+        setHardReloadKey(prev => prev + 1)
     }
 
     const handleRenameProject = async (newName: string) => {
         setProjectName?.(newName)
-        if (isProjectMode) {
-            try {
-                await fetch(`/api/projects/${studioId}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({ name: newName })
-                })
-            } catch (err) {
-                console.error("Failed to rename project", err)
-            }
+        try {
+            await fetch(`/api/projects/${studioId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: newName })
+            })
+        } catch (err) {
+            console.error("Failed to rename project", err)
         }
     }
 
@@ -133,12 +116,7 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
             }
 
             // 2. Persist to backend
-            // Both scraper jobs and standalone projects share the same files endpoint shape:
-            //   scraper: POST /api/remix/:jobId/files
-            //   project: POST /api/projects/:projectId/files
-            const filesEndpoint = isProjectMode
-                ? `/api/projects/${studioId}/files`
-                : `/api/remix/${studioId}/files`
+            const filesEndpoint = `/api/projects/${studioId}/files`
 
             for (const [p, c] of edits) {
                 try {
@@ -208,7 +186,6 @@ export function RemixStudioView({ jobId, projectId, onBack }: RemixStudioProps) 
                     previewUrl={previewUrl}
                     isBootingContainer={isBootingContainer}
                     refreshKey={refreshKey}
-                    hardReloadKey={hardReloadKey}
                     files={files}
                     selectedFile={selectedFile}
                     setSelectedFile={setSelectedFile}

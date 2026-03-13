@@ -15,6 +15,17 @@ import type { GeneratedFile, ChatMessage, ImageAttachment, ChatEvent } from "@/t
 import { updateFiles, installPackages } from "@/lib/webcontainer"
 import { apiRoutes } from "@/config/api"
 
+const CHAT_DEBUG = import.meta.env.VITE_CHAT_DEBUG === "true"
+
+function chatDebugLog(message: string, meta?: unknown): void {
+  if (!CHAT_DEBUG) return
+  if (meta !== undefined) {
+    console.debug(`[useRemixChat] ${message}`, meta)
+    return
+  }
+  console.debug(`[useRemixChat] ${message}`)
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Types
 // ────────────────────────────────────────────────────────────────────────────
@@ -51,6 +62,13 @@ async function streamChatEvents(
   const body: Record<string, unknown> = { prompt, mode }
   if (images.length > 0) body.images = images
 
+  chatDebugLog("sending chat request", {
+    jobId,
+    mode,
+    promptLength: prompt.length,
+    images: images.length,
+  })
+
   const res = await fetch(apiRoutes.chat(jobId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -61,6 +79,7 @@ async function streamChatEvents(
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({ error: res.statusText }))
+    chatDebugLog("chat request failed", { status: res.status, errData })
     throw new Error((errData as { error?: string }).error ?? "Chat request failed")
   }
 
@@ -86,6 +105,7 @@ async function streamChatEvents(
         if (!jsonStr) continue
         try {
           const event: ChatEvent = JSON.parse(jsonStr)
+          chatDebugLog("received stream event", { type: event.type })
           onEvent(event)
         } catch {
           // ignore malformed frames / keep-alive
@@ -98,13 +118,16 @@ async function streamChatEvents(
       const jsonStr = buffer.slice(6).trim()
       if (jsonStr) {
         try {
-          onEvent(JSON.parse(jsonStr) as ChatEvent)
+          const event = JSON.parse(jsonStr) as ChatEvent
+          chatDebugLog("received final stream event", { type: event.type })
+          onEvent(event)
         } catch {
           // ignore
         }
       }
     }
   } finally {
+    chatDebugLog("stream reader released")
     reader.releaseLock()
   }
 }
@@ -419,6 +442,7 @@ export function useRemixChat(
         (event) => handleChatEvent(event, assistantMsgId),
       )
         .catch((err) => {
+          chatDebugLog("streamChatEvents errored", { message: (err as Error).message })
           if ((err as Error).name === "AbortError") {
             setMessages((prev) =>
               prev.map((m) =>
@@ -446,6 +470,7 @@ export function useRemixChat(
           }
         })
         .finally(() => {
+          chatDebugLog("chat request lifecycle finished")
           setIsStreaming(false)
           setIsThinking(false)
           setMessages((prev) =>

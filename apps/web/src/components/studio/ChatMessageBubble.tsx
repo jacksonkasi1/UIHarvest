@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, FileCode, Copy, RefreshCcw } from "lucide-react"
+import { Check, Copy, RefreshCcw, Activity } from "lucide-react"
 import type { ChatMessage } from "@/types/studio"
 import { MarkdownContent } from "./MarkdownContent"
 import { ToolExecutionCard } from "./ToolExecutionCard"
@@ -43,8 +43,8 @@ export function ChatMessageBubble({ msg, msgIdx, onRetry }: { msg: ChatMessage, 
                 {msg.toolExecutions && msg.toolExecutions.length > 0 && (
                     <div className="mb-4 space-y-2 mt-2 w-full">
                         <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground mb-1.5 px-2">
-                            <FileCode aria-hidden="true" className="w-[18px] h-[18px]" />
-                            <span>{msg.toolExecutions.length} edit{msg.toolExecutions.length !== 1 ? 's' : ''} applied</span>
+                            <Activity aria-hidden="true" className="w-[18px] h-[18px]" />
+                            <span>{msg.toolExecutions.length} agent step{msg.toolExecutions.length !== 1 ? 's' : ''}</span>
                         </div>
                         <div className="flex flex-col w-full max-w-full overflow-hidden">
                             {msg.toolExecutions.map((exec, i) => (

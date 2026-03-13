@@ -15,8 +15,7 @@ import { apiRoutes } from "@/config/api"
 /**
  * useProjectContainer
  *
- * Mirror of useWebContainer but uses the standalone /api/projects/:id/* routes
- * instead of the scraper-originated /api/remix/:id/* routes.
+ * Handles project lifecycle with /api/projects/:id/* routes.
  */
 export function useProjectContainer(
     projectId: string,
