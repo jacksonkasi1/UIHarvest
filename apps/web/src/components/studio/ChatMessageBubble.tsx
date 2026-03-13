@@ -54,9 +54,11 @@ export function ChatMessageBubble({ msg, msgIdx, onRetry }: { msg: ChatMessage, 
                     </div>
                 )}
                 {/* Message content */}
-                {msg.role === "assistant" && msg.content && (!msg.toolExecutions || msg.toolExecutions.length === 0) ? (
-                    <MarkdownContent content={msg.content} />
-                ) : msg.content && (!msg.toolExecutions || msg.toolExecutions.length === 0) ? (
+                {msg.role === "assistant" && msg.content ? (
+                    <div className={msg.toolExecutions && msg.toolExecutions.length > 0 ? "mt-2" : ""}>
+                        <MarkdownContent content={msg.content} />
+                    </div>
+                ) : msg.content ? (
                     <span className="text-[14px] leading-relaxed block whitespace-pre-wrap text-foreground">{msg.content}</span>
                 ) : null}
                 {msg.status === "streaming" && (

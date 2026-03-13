@@ -33,7 +33,6 @@ export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
             <button
                 className="flex items-center gap-3 w-full px-3 py-3 text-left text-[14px] transition-colors focus:outline-none bg-background hover:bg-muted/30"
                 onClick={() => setExpanded(!expanded)}
-                disabled={!exec.summary && exec.status === "running"}
             >
                 {exec.status === "running" ? (
                     <Loader2 className="h-4 w-4 animate-spin text-[#f97316] shrink-0" />
@@ -57,9 +56,9 @@ export function ToolExecutionCard({ exec }: { exec: ToolExecution }) {
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-50" />
                 )}
             </button>
-            {expanded && exec.summary && (
+            {expanded && (exec.summary || exec.message) && (
                 <div className="px-4 pb-4 pt-1 text-[13px] text-muted-foreground bg-background border-t border-border/50 mt-0">
-                    <p className="leading-relaxed mt-2">{exec.summary}</p>
+                    <p className="leading-relaxed mt-2">{exec.summary ?? exec.message}</p>
                 </div>
             )}
         </div>

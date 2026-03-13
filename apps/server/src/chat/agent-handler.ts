@@ -52,6 +52,7 @@ export interface AgentHandlerOptions {
  */
 export async function handleAgentChat(options: AgentHandlerOptions): Promise<void> {
   const { jobId, prompt, res, signal } = options
+  const subagentToolCalls = new Set<string>()
 
   console.log(`[agent-handler] start jobId=${jobId} promptLen=${prompt.length}`)
 
@@ -93,6 +94,8 @@ export async function handleAgentChat(options: AgentHandlerOptions): Promise<voi
     mcpTools,
     codeEditCallbacks: {
       onEditStart: (path) => {
+        subagentToolCalls.add("code_editor")
+        subagentToolCalls.add("code_edit")
         sendSSE(res, {
           type: "tool_start",
           tool: "code_edit",
@@ -129,7 +132,6 @@ export async function handleAgentChat(options: AgentHandlerOptions): Promise<voi
 
     let fullText = ""
     let eventCount = 0
-    const subagentToolCalls = new Set<string>()
 
     for await (const [namespace, chunk] of stream) {
       if (signal.aborted) break

@@ -277,6 +277,7 @@ export function useRemixChat(
           setMessages((prev) =>
             prev.map((m) => {
               if (m.id !== assistantMsgId) return m
+              const statusLine = event.message ?? "Processing..."
               const toolExecs = [...(m.toolExecutions ?? [])]
               let lastRunning = -1
               for (let i = toolExecs.length - 1; i >= 0; i--) {
@@ -289,15 +290,20 @@ export function useRemixChat(
                 toolExecs[lastRunning] = {
                   ...toolExecs[lastRunning],
                   message: event.message ?? "Processing…",
+                  summary: event.message ?? toolExecs[lastRunning].summary,
                 }
               } else {
                 toolExecs.push({
                   tool: event.tool ?? "unknown",
                   status: "running" as const,
-                  message: event.message ?? "Processing…",
+                  message: statusLine,
+                  summary: statusLine,
                 })
               }
-              return { ...m, toolExecutions: toolExecs }
+              const nextContent = m.content
+                ? `${m.content}\n${statusLine}`
+                : statusLine
+              return { ...m, content: nextContent, toolExecutions: toolExecs }
             }),
           )
           break
@@ -354,11 +360,17 @@ export function useRemixChat(
                 toolExecs[lastRunning] = {
                   ...toolExecs[lastRunning],
                   status: "complete" as const,
-                  summary: event.summary,
+                  summary: event.summary ?? toolExecs[lastRunning].summary,
                   filesChanged: event.files?.length,
                 }
               }
-              return { ...m, toolExecutions: toolExecs }
+              const completionLine = event.summary ?? event.message
+              const nextContent = completionLine
+                ? m.content
+                  ? `${m.content}\n${completionLine}`
+                  : completionLine
+                : m.content
+              return { ...m, content: nextContent, toolExecutions: toolExecs }
             }),
           )
           break

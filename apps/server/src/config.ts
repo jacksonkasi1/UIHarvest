@@ -5,6 +5,7 @@ export const serverConfig = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 3334),
   sitePassword: process.env.SITE_PASSWORD || "",
+  authDisabled: process.env.AUTH_DISABLED === "true",
   sessionSecret:
     process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
