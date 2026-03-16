@@ -42,7 +42,7 @@ GOOGLE_CLOUD_API_KEY=your_key_here
 
 Optional:
 
-- `SITE_PASSWORD`
+- `SITE_PASSWORD` (example/default: `654321`)
 - `GOOGLE_CLOUD_PROJECT`
 - `GCS_BUCKET`
 
